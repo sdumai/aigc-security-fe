@@ -269,7 +269,7 @@ const DataOutputPage = () => {
   )
 
   return (
-    <div>
+    <div className="page-transition">
       <div className="page-header">
         <Title level={2} className="page-title">
           数据输出

@@ -349,7 +349,7 @@ const GeneralGeneratePage = () => {
   )
 
   return (
-    <div>
+    <div className="page-transition">
       <div className="page-header">
         <Title level={2} className="page-title">
           多模态内容生成

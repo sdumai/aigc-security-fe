@@ -107,7 +107,7 @@ const DeepfakeGeneratePage = () => {
   }
 
   return (
-    <div>
+    <div className="page-transition">
       <div className="page-header">
         <Title level={2} className="page-title">
           Deepfake 人脸生成

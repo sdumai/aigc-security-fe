@@ -130,4 +130,100 @@ code {
   mix-blend-mode: multiply;
 }
 
+/* 页面切换动画 */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.page-transition {
+  animation: fadeInUp 0.4s ease-out;
+}
+
+.page-header {
+  animation: fadeIn 0.3s ease-out;
+}
+
+.ant-card {
+  animation: fadeInUp 0.5s ease-out;
+  animation-fill-mode: both;
+}
+
+.ant-card:nth-child(1) {
+  animation-delay: 0.05s;
+}
+
+.ant-card:nth-child(2) {
+  animation-delay: 0.1s;
+}
+
+.ant-card:nth-child(3) {
+  animation-delay: 0.15s;
+}
+
+.ant-card:nth-child(4) {
+  animation-delay: 0.2s;
+}
+
+/* 按钮悬停效果 */
+.ant-btn {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.ant-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.ant-btn:active {
+  transform: translateY(0);
+}
+
+/* 卡片悬停效果增强 */
+.card-hover {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.card-hover:hover {
+  transform: translateY(-6px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+}
+
+/* 菜单项动画 */
+.ant-menu-item,
+.ant-menu-submenu-title {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* 图片加载动画 */
+.ant-image {
+  animation: fadeIn 0.4s ease-out;
+}
+
+/* 上传区域动画 */
+.ant-upload-drag {
+  transition: all 0.3s ease;
+}
+
+.ant-upload-drag:hover {
+  border-color: #40a9ff;
+  background: #f0f8ff;
+  transform: scale(1.01);
+}
+
 

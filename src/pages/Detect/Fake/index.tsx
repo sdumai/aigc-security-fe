@@ -119,7 +119,7 @@ const FakeDetectPage = () => {
   };
 
   return (
-    <div>
+    <div className="page-transition">
       <div className="page-header">
         <Title level={2} className="page-title">
           虚假内容检测

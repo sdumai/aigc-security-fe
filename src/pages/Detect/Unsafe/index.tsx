@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState } from "react";
 import {
   Card,
   Upload,
@@ -14,141 +14,147 @@ import {
   Button,
   Divider,
   List,
-} from 'antd'
+} from "antd";
 import {
   UploadOutlined,
   WarningOutlined,
   CheckCircleOutlined,
   ExclamationCircleOutlined,
   SafetyOutlined,
-} from '@ant-design/icons'
-import type { UploadFile, UploadProps } from 'antd'
-import request from '@/utils/request'
+} from "@ant-design/icons";
+import type { UploadFile, UploadProps } from "antd";
+import request from "@/utils/request";
 
-const { Title, Paragraph, Text } = Typography
-const { Dragger } = Upload
+const { Title, Paragraph, Text } = Typography;
+const { Dragger } = Upload;
 
-type RiskLevel = 'low' | 'medium' | 'high'
+type RiskLevel = "low" | "medium" | "high";
 
 interface DetectionResult {
-  violations: string[]
-  risk: RiskLevel
-  riskScore: number
-  suggestions: string[]
+  violations: string[];
+  risk: RiskLevel;
+  riskScore: number;
+  suggestions: string[];
   details: {
     [key: string]: {
-      score: number
+      score: number;
       regions?: Array<{
-        x: number
-        y: number
-        width: number
-        height: number
-      }>
-    }
-  }
+        x: number;
+        y: number;
+        width: number;
+        height: number;
+      }>;
+    };
+  };
 }
 
 const violationLabels: Record<string, string> = {
-  violence: '暴力内容',
-  sensitive: '敏感内容',
-  sexual: '色情内容',
-  hate: '仇恨符号',
-  drugs: '毒品相关',
-  gambling: '赌博内容',
-}
+  violence: "暴力内容",
+  sensitive: "敏感内容",
+  sexual: "色情内容",
+  hate: "仇恨符号",
+  drugs: "毒品相关",
+  gambling: "赌博内容",
+};
 
-const riskConfig: Record<RiskLevel, { color: string; text: string; icon: React.ReactNode }> = {
+const riskConfig: Record<
+  RiskLevel,
+  { color: string; text: string; icon: React.ReactNode }
+> = {
   low: {
-    color: '#52c41a',
-    text: '低风险',
+    color: "#52c41a",
+    text: "低风险",
     icon: <CheckCircleOutlined />,
   },
   medium: {
-    color: '#faad14',
-    text: '中风险',
+    color: "#faad14",
+    text: "中风险",
     icon: <ExclamationCircleOutlined />,
   },
   high: {
-    color: '#ff4d4f',
-    text: '高风险',
+    color: "#ff4d4f",
+    text: "高风险",
     icon: <WarningOutlined />,
   },
-}
+};
 
 const UnsafeDetectPage = () => {
-  const [loading, setLoading] = useState(false)
-  const [result, setResult] = useState<DetectionResult | null>(null)
-  const [uploadedFile, setUploadedFile] = useState<UploadFile | null>(null)
-  const [previewUrl, setPreviewUrl] = useState<string>('')
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<DetectionResult | null>(null);
+  const [uploadedFile, setUploadedFile] = useState<UploadFile | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string>("");
 
-  const handleUpload: UploadProps['customRequest'] = async (options) => {
-    const { file } = options
-    const uploadFile = file as File
+  const handleUpload: UploadProps["customRequest"] = async (options) => {
+    const { file } = options;
+    const uploadFile = file as File;
 
     try {
-      setUploadedFile(file as any)
+      setUploadedFile(file as any);
       // 创建预览 URL
-      const url = URL.createObjectURL(uploadFile)
-      setPreviewUrl(url)
-      message.success('文件上传成功，请点击开始检测')
+      const url = URL.createObjectURL(uploadFile);
+      setPreviewUrl(url);
+      message.success("文件上传成功，请点击开始检测");
     } catch (error) {
-      console.error('Upload error:', error)
-      message.error('上传失败，请重试')
+      console.error("Upload error:", error);
+      message.error("上传失败，请重试");
     }
-  }
+  };
 
   const handleDetect = async () => {
     if (!uploadedFile) {
-      message.warning('请先上传文件')
-      return
+      message.warning("请先上传文件");
+      return;
     }
 
     try {
-      setLoading(true)
-      setResult(null)
+      setLoading(true);
+      setResult(null);
 
       // 发送检测请求
-      const formData = new FormData()
-      formData.append('file', uploadedFile.originFileObj as File)
+      const formData = new FormData();
+      formData.append("file", uploadedFile.originFileObj as File);
 
-      const response: any = await request.post('/detect/unsafe', formData, {
+      const response: any = await request.post("/detect/unsafe", formData, {
         headers: {
-          'Content-Type': 'multipart/form-data',
+          "Content-Type": "multipart/form-data",
         },
-      })
+      });
 
-      console.log('Detection response:', response)
-      setResult(response)
-      message.success('检测完成！')
-      
+      console.log("Detection response:", response);
+      setResult(response);
+      message.success("检测完成！");
+
       // 滚动到结果区域
       setTimeout(() => {
-        window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' })
-      }, 100)
+        window.scrollTo({
+          top: document.body.scrollHeight,
+          behavior: "smooth",
+        });
+      }, 100);
     } catch (error) {
-      console.error('Detection error:', error)
-      message.error('检测失败，请重试')
+      console.error("Detection error:", error);
+      message.error("检测失败，请重试");
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   const uploadProps: UploadProps = {
-    name: 'file',
+    name: "file",
     multiple: false,
     customRequest: handleUpload,
     showUploadList: false,
-    accept: 'image/*,video/*',
-  }
+    accept: "image/*,video/*",
+  };
 
   const resetDetection = () => {
-    setResult(null)
-    setUploadedFile(null)
-    setPreviewUrl('')
-  }
+    setResult(null);
+    setUploadedFile(null);
+    setPreviewUrl("");
+  };
 
   return (
-    <div>
+    <div className="page-transition">
       <div className="page-header">
         <Title level={2} className="page-title">
           不安全内容检测
@@ -171,9 +177,9 @@ const UnsafeDetectPage = () => {
         <Col xs={24} lg={12}>
           <Card title="上传检测内容" bordered={false}>
             {!uploadedFile && (
-              <Dragger {...uploadProps} style={{ padding: '40px 20px' }}>
+              <Dragger {...uploadProps} style={{ padding: "40px 20px" }}>
                 <p className="ant-upload-drag-icon">
-                  <UploadOutlined style={{ fontSize: 48, color: '#1890ff' }} />
+                  <UploadOutlined style={{ fontSize: 48, color: "#1890ff" }} />
                 </p>
                 <p className="ant-upload-text" style={{ fontSize: 18 }}>
                   点击或拖拽文件到此区域上传
@@ -188,14 +194,14 @@ const UnsafeDetectPage = () => {
               <Image
                 src={previewUrl}
                 alt="上传的内容"
-                style={{ width: '100%', borderRadius: 8 }}
+                style={{ width: "100%", borderRadius: 8 }}
                 preview={false}
               />
             )}
 
             <Space
               direction="vertical"
-              style={{ width: '100%', marginTop: 16 }}
+              style={{ width: "100%", marginTop: 16 }}
             >
               <Button
                 type="primary"
@@ -206,7 +212,7 @@ const UnsafeDetectPage = () => {
                 loading={loading}
                 disabled={!uploadedFile || loading}
               >
-                {loading ? '检测中...' : result ? '重新检测' : '开始检测'}
+                {loading ? "检测中..." : result ? "重新检测" : "开始检测"}
               </Button>
               <Button
                 block
@@ -225,16 +231,16 @@ const UnsafeDetectPage = () => {
             {!result && !loading && (
               <div
                 style={{
-                  textAlign: 'center',
-                  padding: '80px 20px',
-                  background: '#fafafa',
+                  textAlign: "center",
+                  padding: "80px 20px",
+                  background: "#fafafa",
                   borderRadius: 8,
                 }}
               >
                 <SafetyOutlined
-                  style={{ fontSize: 64, color: '#d9d9d9', marginBottom: 16 }}
+                  style={{ fontSize: 64, color: "#d9d9d9", marginBottom: 16 }}
                 />
-                <Paragraph style={{ color: '#999', marginBottom: 8 }}>
+                <Paragraph style={{ color: "#999", marginBottom: 8 }}>
                   等待上传文件
                 </Paragraph>
                 <Text type="secondary" style={{ fontSize: 12 }}>
@@ -246,14 +252,14 @@ const UnsafeDetectPage = () => {
             {loading && (
               <div
                 style={{
-                  textAlign: 'center',
-                  padding: '80px 20px',
-                  background: '#fafafa',
+                  textAlign: "center",
+                  padding: "80px 20px",
+                  background: "#fafafa",
                   borderRadius: 8,
                 }}
               >
                 <Spin size="large" />
-                <Paragraph style={{ marginTop: 16, color: '#666' }}>
+                <Paragraph style={{ marginTop: 16, color: "#666" }}>
                   检测中...
                 </Paragraph>
               </div>
@@ -263,21 +269,38 @@ const UnsafeDetectPage = () => {
               <div>
                 <Alert
                   message="安全检测已完成"
-                  description={`检测到 ${result.violations.length} 个违规类型，风险等级：${riskConfig[result.risk].text}`}
-                  type={result.risk === 'low' ? 'success' : result.risk === 'medium' ? 'warning' : 'error'}
+                  description={`检测到 ${
+                    result.violations.length
+                  } 个违规类型，风险等级：${riskConfig[result.risk].text}`}
+                  type={
+                    result.risk === "low"
+                      ? "success"
+                      : result.risk === "medium"
+                      ? "warning"
+                      : "error"
+                  }
                   showIcon
                   style={{ marginBottom: 16 }}
                 />
-                <Space direction="vertical" size="large" style={{ width: '100%' }}>
+                <Space
+                  direction="vertical"
+                  size="large"
+                  style={{ width: "100%" }}
+                >
                   <div
                     style={{
-                      textAlign: 'center',
-                      padding: '20px',
+                      textAlign: "center",
+                      padding: "20px",
                       background: `${riskConfig[result.risk].color}15`,
                       borderRadius: 8,
                     }}
                   >
-                    <div style={{ fontSize: 64, color: riskConfig[result.risk].color }}>
+                    <div
+                      style={{
+                        fontSize: 64,
+                        color: riskConfig[result.risk].color,
+                      }}
+                    >
                       {riskConfig[result.risk].icon}
                     </div>
                     <Title
@@ -307,7 +330,11 @@ const UnsafeDetectPage = () => {
                             <Tag
                               key={violation}
                               color="red"
-                              style={{ fontSize: 14, padding: '4px 12px', marginBottom: 8 }}
+                              style={{
+                                fontSize: 14,
+                                padding: "4px 12px",
+                                marginBottom: 8,
+                              }}
                             >
                               {violationLabels[violation] || violation}
                             </Tag>
@@ -326,15 +353,28 @@ const UnsafeDetectPage = () => {
                           dataSource={Object.entries(result.details)}
                           renderItem={([key, value]) => (
                             <List.Item>
-                              <Space direction="vertical" style={{ width: '100%' }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                  <Text strong>{violationLabels[key] || key}</Text>
+                              <Space
+                                direction="vertical"
+                                style={{ width: "100%" }}
+                              >
+                                <div
+                                  style={{
+                                    display: "flex",
+                                    justifyContent: "space-between",
+                                  }}
+                                >
+                                  <Text strong>
+                                    {violationLabels[key] || key}
+                                  </Text>
                                   <Text type="danger">
                                     {Math.round(value.score * 100)}%
                                   </Text>
                                 </div>
                                 {value.regions && value.regions.length > 0 && (
-                                  <Text type="secondary" style={{ fontSize: 12 }}>
+                                  <Text
+                                    type="secondary"
+                                    style={{ fontSize: 12 }}
+                                  >
                                     检测到 {value.regions.length} 处可疑区域
                                   </Text>
                                 )}
@@ -370,7 +410,7 @@ const UnsafeDetectPage = () => {
                     </>
                   )}
 
-                  <Space style={{ width: '100%' }} direction="vertical">
+                  <Space style={{ width: "100%" }} direction="vertical">
                     <Button block>导出检测报告</Button>
                   </Space>
                 </Space>
@@ -380,9 +420,7 @@ const UnsafeDetectPage = () => {
         </Col>
       </Row>
     </div>
-  )
-}
+  );
+};
 
-export default UnsafeDetectPage
-
-
+export default UnsafeDetectPage;

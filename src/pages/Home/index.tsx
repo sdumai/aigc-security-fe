@@ -64,7 +64,7 @@ const HomePage = () => {
   ]
 
   return (
-    <div>
+    <div className="page-transition">
       {/* 英雄区域 */}
       <div
         style={{
