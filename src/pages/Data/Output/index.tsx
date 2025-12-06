@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect } from "react";
 import {
   Card,
   Row,
@@ -16,7 +16,7 @@ import {
   Typography,
   Tabs,
   Empty,
-} from 'antd'
+} from "antd";
 import {
   DownloadOutlined,
   EyeOutlined,
@@ -25,104 +25,106 @@ import {
   VideoCameraOutlined,
   FileImageOutlined,
   ClockCircleOutlined,
-} from '@ant-design/icons'
-import request from '@/utils/request'
+} from "@ant-design/icons";
+import request from "@/utils/request";
 
-const { Title, Paragraph, Text } = Typography
+const { Title, Paragraph, Text } = Typography;
 
 interface OutputItem {
-  id: string
-  type: 'image' | 'video'
-  title: string
-  thumbnailUrl: string
-  fullUrl: string
-  createdAt: string
-  size: string
+  id: string;
+  type: "image" | "video";
+  title: string;
+  thumbnailUrl: string;
+  fullUrl: string;
+  createdAt: string;
+  size: string;
 }
 
 interface DetectionRecord {
-  id: string
-  type: 'fake' | 'unsafe'
-  filename: string
-  result: string
-  confidence?: number
-  riskScore?: number
-  createdAt: string
+  id: string;
+  type: "fake" | "unsafe";
+  filename: string;
+  result: string;
+  confidence?: number;
+  riskScore?: number;
+  createdAt: string;
 }
 
 const DataOutputPage = () => {
-  const [loading, setLoading] = useState(false)
-  const [outputs, setOutputs] = useState<OutputItem[]>([])
-  const [detections, setDetections] = useState<DetectionRecord[]>([])
-  const [downloadModalVisible, setDownloadModalVisible] = useState(false)
-  const [selectedItem, setSelectedItem] = useState<OutputItem | null>(null)
-  const [previewModalVisible, setPreviewModalVisible] = useState(false)
-  const [downloadForm] = Form.useForm()
+  const [loading, setLoading] = useState(false);
+  const [outputs, setOutputs] = useState<OutputItem[]>([]);
+  const [detections, setDetections] = useState<DetectionRecord[]>([]);
+  const [downloadModalVisible, setDownloadModalVisible] = useState(false);
+  const [selectedItem, setSelectedItem] = useState<OutputItem | null>(null);
+  const [previewModalVisible, setPreviewModalVisible] = useState(false);
+  const [downloadForm] = Form.useForm();
 
   useEffect(() => {
-    fetchOutputs()
-    fetchDetections()
-  }, [])
+    fetchOutputs();
+    fetchDetections();
+  }, []);
 
   const fetchOutputs = async () => {
     try {
-      setLoading(true)
-      const response: any = await request.get('/data/outputs')
+      setLoading(true);
+      const response: any = await request.get("/data/outputs");
       if (response && response.data) {
-        setOutputs(response.data)
+        setOutputs(response.data);
       }
     } catch (error) {
-      console.error('Fetch outputs error:', error)
-      message.error('加载生成内容失败')
-      setOutputs([])
+      console.error("Fetch outputs error:", error);
+      message.error("加载生成内容失败");
+      setOutputs([]);
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   const fetchDetections = async () => {
     try {
-      const response: any = await request.get('/data/detections')
+      const response: any = await request.get("/data/detections");
       if (response && response.data) {
-        setDetections(response.data)
+        setDetections(response.data);
       }
     } catch (error) {
-      console.error('Fetch detections error:', error)
-      setDetections([])
+      console.error("Fetch detections error:", error);
+      setDetections([]);
     }
-  }
+  };
 
   const handlePreview = (item: OutputItem) => {
-    setSelectedItem(item)
-    setPreviewModalVisible(true)
-  }
+    setSelectedItem(item);
+    setPreviewModalVisible(true);
+  };
 
   const handleDownloadClick = (item: OutputItem) => {
-    setSelectedItem(item)
-    setDownloadModalVisible(true)
-  }
+    setSelectedItem(item);
+    setDownloadModalVisible(true);
+  };
 
   const handleDownload = async () => {
     try {
-      const values = await downloadForm.validateFields()
-      message.success(`正在下载 ${selectedItem?.title}，格式：${values.format}`)
-      setDownloadModalVisible(false)
-      downloadForm.resetFields()
+      const values = await downloadForm.validateFields();
+      message.success(
+        `正在下载 ${selectedItem?.title}，格式：${values.format}`
+      );
+      setDownloadModalVisible(false);
+      downloadForm.resetFields();
     } catch (error) {
-      console.error('Download error:', error)
+      console.error("Download error:", error);
     }
-  }
+  };
 
   const renderOutputCard = (item: OutputItem) => (
     <Card
       key={item.id}
       hoverable
       cover={
-        <div style={{ height: 200, overflow: 'hidden', background: '#f0f0f0' }}>
+        <div style={{ height: 200, overflow: "hidden", background: "#f0f0f0" }}>
           <Image
             src={item.thumbnailUrl}
             alt={item.title}
-            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+            style={{ width: "100%", height: "100%", objectFit: "cover" }}
             preview={false}
           />
         </div>
@@ -150,10 +152,10 @@ const DataOutputPage = () => {
       <Card.Meta
         title={
           <Space>
-            {item.type === 'image' ? (
-              <FileImageOutlined style={{ color: '#1890ff' }} />
+            {item.type === "image" ? (
+              <FileImageOutlined style={{ color: "#1890ff" }} />
             ) : (
-              <VideoCameraOutlined style={{ color: '#52c41a' }} />
+              <VideoCameraOutlined style={{ color: "#52c41a" }} />
             )}
             <Text ellipsis style={{ maxWidth: 180 }}>
               {item.title}
@@ -172,7 +174,7 @@ const DataOutputPage = () => {
         }
       />
     </Card>
-  )
+  );
 
   const outputsTab = (
     <div>
@@ -181,7 +183,7 @@ const DataOutputPage = () => {
       </Paragraph>
 
       {loading ? (
-        <div style={{ textAlign: 'center', padding: '80px 0' }}>
+        <div style={{ textAlign: "center", padding: "80px 0" }}>
           <Spin size="large" />
         </div>
       ) : outputs.length > 0 ? (
@@ -194,7 +196,7 @@ const DataOutputPage = () => {
             ))}
           </Row>
 
-          <div style={{ textAlign: 'center', marginTop: 24 }}>
+          <div style={{ textAlign: "center", marginTop: 24 }}>
             <Button size="large" icon={<DownloadOutlined />}>
               批量导出
             </Button>
@@ -204,7 +206,7 @@ const DataOutputPage = () => {
         <Empty description="暂无生成内容" />
       )}
     </div>
-  )
+  );
 
   const detectionsTab = (
     <div>
@@ -214,14 +216,14 @@ const DataOutputPage = () => {
 
       {detections.length > 0 ? (
         <Card>
-          <Space direction="vertical" style={{ width: '100%' }} size="middle">
+          <Space direction="vertical" style={{ width: "100%" }} size="middle">
             {detections.map((record) => (
               <Card key={record.id} size="small">
                 <Row align="middle">
                   <Col xs={24} sm={8}>
                     <Space>
-                      <Tag color={record.type === 'fake' ? 'blue' : 'orange'}>
-                        {record.type === 'fake' ? '虚假检测' : '安全检测'}
+                      <Tag color={record.type === "fake" ? "blue" : "orange"}>
+                        {record.type === "fake" ? "虚假检测" : "安全检测"}
                       </Tag>
                       <Text strong>{record.filename}</Text>
                     </Space>
@@ -231,9 +233,10 @@ const DataOutputPage = () => {
                       结果：
                       <Tag
                         color={
-                          record.result === '真实' || record.result.includes('低')
-                            ? 'success'
-                            : 'error'
+                          record.result === "真实" ||
+                          record.result.includes("低")
+                            ? "success"
+                            : "error"
                         }
                       >
                         {record.result}
@@ -252,7 +255,7 @@ const DataOutputPage = () => {
                       </Text>
                     )}
                   </Col>
-                  <Col xs={24} sm={4} style={{ textAlign: 'right' }}>
+                  <Col xs={24} sm={4} style={{ textAlign: "right" }}>
                     <Text type="secondary" style={{ fontSize: 12 }}>
                       {record.createdAt}
                     </Text>
@@ -266,10 +269,10 @@ const DataOutputPage = () => {
         <Empty description="暂无检测记录" />
       )}
     </div>
-  )
+  );
 
   return (
-    <div className="page-transition">
+    <div>
       <div className="page-header">
         <Title level={2} className="page-title">
           数据输出
@@ -285,14 +288,14 @@ const DataOutputPage = () => {
         size="large"
         items={[
           {
-            key: 'outputs',
-            label: '生成内容',
+            key: "outputs",
+            label: "生成内容",
             icon: <PictureOutlined />,
             children: outputsTab,
           },
           {
-            key: 'detections',
-            label: '检测记录',
+            key: "detections",
+            label: "检测记录",
             icon: <EyeOutlined />,
             children: detectionsTab,
           },
@@ -313,8 +316,8 @@ const DataOutputPage = () => {
             type="primary"
             icon={<DownloadOutlined />}
             onClick={() => {
-              setPreviewModalVisible(false)
-              if (selectedItem) handleDownloadClick(selectedItem)
+              setPreviewModalVisible(false);
+              if (selectedItem) handleDownloadClick(selectedItem);
             }}
           >
             下载
@@ -322,13 +325,13 @@ const DataOutputPage = () => {
         ]}
         width={800}
       >
-        {selectedItem?.type === 'image' ? (
+        {selectedItem?.type === "image" ? (
           <Image src={selectedItem.fullUrl} alt={selectedItem.title} />
         ) : (
           <video
             src={selectedItem?.fullUrl}
             controls
-            style={{ width: '100%', maxHeight: 500 }}
+            style={{ width: "100%", maxHeight: 500 }}
           >
             您的浏览器不支持视频播放
           </video>
@@ -341,8 +344,8 @@ const DataOutputPage = () => {
         open={downloadModalVisible}
         onOk={handleDownload}
         onCancel={() => {
-          setDownloadModalVisible(false)
-          downloadForm.resetFields()
+          setDownloadModalVisible(false);
+          downloadForm.resetFields();
         }}
         okText="开始下载"
         cancelText="取消"
@@ -351,18 +354,18 @@ const DataOutputPage = () => {
           form={downloadForm}
           layout="vertical"
           initialValues={{
-            format: selectedItem?.type === 'video' ? 'MP4' : 'PNG',
-            resolution: 'original',
+            format: selectedItem?.type === "video" ? "MP4" : "PNG",
+            resolution: "original",
             batch: false,
           }}
         >
           <Form.Item
             label="文件格式"
             name="format"
-            rules={[{ required: true, message: '请选择格式' }]}
+            rules={[{ required: true, message: "请选择格式" }]}
           >
             <Select>
-              {selectedItem?.type === 'video' ? (
+              {selectedItem?.type === "video" ? (
                 <>
                   <Select.Option value="MP4">MP4</Select.Option>
                   <Select.Option value="MOV">MOV</Select.Option>
@@ -381,7 +384,7 @@ const DataOutputPage = () => {
           <Form.Item
             label="分辨率"
             name="resolution"
-            rules={[{ required: true, message: '请选择分辨率' }]}
+            rules={[{ required: true, message: "请选择分辨率" }]}
           >
             <Select>
               <Select.Option value="original">原始分辨率</Select.Option>
@@ -397,9 +400,7 @@ const DataOutputPage = () => {
         </Form>
       </Modal>
     </div>
-  )
-}
+  );
+};
 
-export default DataOutputPage
-
-
+export default DataOutputPage;

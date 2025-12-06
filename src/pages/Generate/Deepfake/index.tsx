@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Card,
   Form,
@@ -15,96 +15,102 @@ import {
   Image,
   Space,
   Alert,
-} from 'antd'
-import { UploadOutlined, ThunderboltOutlined } from '@ant-design/icons'
-import type { UploadFile } from 'antd'
-import request from '@/utils/request'
+} from "antd";
+import { UploadOutlined, ThunderboltOutlined } from "@ant-design/icons";
+import type { UploadFile } from "antd";
+import request from "@/utils/request";
 
-const { Title, Paragraph } = Typography
+const { Title, Paragraph } = Typography;
 
-type FunctionType = 'faceswap' | 'fomm' | 'stargan'
-type ModelType = 'FaceShifter' | 'SimSwap' | 'FOMM' | 'StarGAN'
+type FunctionType = "faceswap" | "fomm" | "stargan";
+type ModelType = "FaceShifter" | "SimSwap" | "FOMM" | "StarGAN";
 
 interface GenerateResult {
-  imageUrl: string
-  message: string
+  imageUrl: string;
+  message: string;
 }
 
 const DeepfakeGeneratePage = () => {
-  const navigate = useNavigate()
-  const [form] = Form.useForm()
-  const [loading, setLoading] = useState(false)
-  const [result, setResult] = useState<GenerateResult | null>(null)
-  const [targetFile, setTargetFile] = useState<UploadFile[]>([])
-  const [sourceFile, setSourceFile] = useState<UploadFile[]>([])
-  const [functionType, setFunctionType] = useState<FunctionType>('faceswap')
+  const navigate = useNavigate();
+  const [form] = Form.useForm();
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<GenerateResult | null>(null);
+  const [targetFile, setTargetFile] = useState<UploadFile[]>([]);
+  const [sourceFile, setSourceFile] = useState<UploadFile[]>([]);
+  const [functionType, setFunctionType] = useState<FunctionType>("faceswap");
 
   const modelOptions: Record<FunctionType, ModelType[]> = {
-    faceswap: ['FaceShifter', 'SimSwap'],
-    fomm: ['FOMM'],
-    stargan: ['StarGAN'],
-  }
+    faceswap: ["FaceShifter", "SimSwap"],
+    fomm: ["FOMM"],
+    stargan: ["StarGAN"],
+  };
 
   const handleGenerate = async () => {
     try {
-      await form.validateFields()
-      
+      await form.validateFields();
+
       if (targetFile.length === 0) {
-        message.warning('请上传目标人脸图片')
-        return
+        message.warning("请上传目标人脸图片");
+        return;
       }
-      
+
       if (sourceFile.length === 0) {
-        message.warning('请上传驱动人脸/视频')
-        return
+        message.warning("请上传驱动人脸/视频");
+        return;
       }
 
-      setLoading(true)
-      setResult(null)
+      setLoading(true);
+      setResult(null);
 
-      const values = form.getFieldsValue()
-      const formData = new FormData()
-      formData.append('target', targetFile[0].originFileObj as File)
-      formData.append('source', sourceFile[0].originFileObj as File)
-      formData.append('function', values.function)
-      formData.append('model', values.model)
+      const values = form.getFieldsValue();
+      const formData = new FormData();
+      formData.append("target", targetFile[0].originFileObj as File);
+      formData.append("source", sourceFile[0].originFileObj as File);
+      formData.append("function", values.function);
+      formData.append("model", values.model);
 
-      const response: any = await request.post('/generate/deepfake', formData, {
+      const response: any = await request.post("/generate/deepfake", formData, {
         headers: {
-          'Content-Type': 'multipart/form-data',
+          "Content-Type": "multipart/form-data",
         },
-      })
+      });
 
-      setResult(response)
-      message.success('生成成功！')
+      setResult(response);
+      message.success("生成成功！");
     } catch (error) {
-      console.error('Generate error:', error)
+      console.error("Generate error:", error);
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   const handleSave = async () => {
     try {
-      const values = form.getFieldsValue()
-      await request.post('/data/save', {
-        type: 'image',
-        title: `Deepfake ${values.function === 'faceswap' ? '人脸替换' : values.function === 'fomm' ? '人脸动画' : '属性编辑'}`,
+      const values = form.getFieldsValue();
+      await request.post("/data/save", {
+        type: "image",
+        title: `Deepfake ${
+          values.function === "faceswap"
+            ? "人脸替换"
+            : values.function === "fomm"
+            ? "人脸动画"
+            : "属性编辑"
+        }`,
         url: result?.imageUrl,
         model: values.model,
-      })
+      });
       message.success({
-        content: '内容已保存！可在内容管理中查看',
+        content: "内容已保存！可在内容管理中查看",
         duration: 3,
-      })
+      });
       // 可选：延迟跳转到内容管理页面
       setTimeout(() => {
-        navigate('/data/output')
-      }, 1500)
+        navigate("/data/output");
+      }, 1500);
     } catch (error) {
-      console.error('Save error:', error)
+      console.error("Save error:", error);
     }
-  }
+  };
 
   return (
     <div className="page-transition">
@@ -133,8 +139,8 @@ const DeepfakeGeneratePage = () => {
               form={form}
               layout="vertical"
               initialValues={{
-                function: 'faceswap',
-                model: 'FaceShifter',
+                function: "faceswap",
+                model: "FaceShifter",
               }}
             >
               <Form.Item
@@ -147,8 +153,8 @@ const DeepfakeGeneratePage = () => {
                   fileList={targetFile}
                   maxCount={1}
                   beforeUpload={(file) => {
-                    setTargetFile([file as any])
-                    return false
+                    setTargetFile([file as any]);
+                    return false;
                   }}
                   onRemove={() => setTargetFile([])}
                 >
@@ -171,8 +177,8 @@ const DeepfakeGeneratePage = () => {
                   fileList={sourceFile}
                   maxCount={1}
                   beforeUpload={(file) => {
-                    setSourceFile([file as any])
-                    return false
+                    setSourceFile([file as any]);
+                    return false;
                   }}
                   onRemove={() => setSourceFile([])}
                 >
@@ -188,12 +194,14 @@ const DeepfakeGeneratePage = () => {
               <Form.Item
                 label="功能选择"
                 name="function"
-                rules={[{ required: true, message: '请选择功能' }]}
+                rules={[{ required: true, message: "请选择功能" }]}
               >
                 <Radio.Group
                   onChange={(e) => {
-                    setFunctionType(e.target.value)
-                    form.setFieldsValue({ model: modelOptions[e.target.value][0] })
+                    setFunctionType(e.target.value);
+                    form.setFieldsValue({
+                      model: modelOptions[e.target.value][0],
+                    });
                   }}
                 >
                   <Space direction="vertical">
@@ -207,7 +215,7 @@ const DeepfakeGeneratePage = () => {
               <Form.Item
                 label="模型选择"
                 name="model"
-                rules={[{ required: true, message: '请选择模型' }]}
+                rules={[{ required: true, message: "请选择模型" }]}
               >
                 <Select>
                   {modelOptions[functionType].map((model) => (
@@ -227,7 +235,7 @@ const DeepfakeGeneratePage = () => {
                   loading={loading}
                   onClick={handleGenerate}
                 >
-                  {loading ? '生成中...' : '开始生成'}
+                  {loading ? "生成中..." : "开始生成"}
                 </Button>
               </Form.Item>
             </Form>
@@ -237,9 +245,9 @@ const DeepfakeGeneratePage = () => {
         <Col xs={24} lg={12}>
           <Card title="生成结果" bordered={false}>
             {loading ? (
-              <div style={{ textAlign: 'center', padding: '80px 0' }}>
+              <div style={{ textAlign: "center", padding: "80px 0" }}>
                 <Spin size="large" />
-                <Paragraph style={{ marginTop: 16, color: '#666' }}>
+                <Paragraph style={{ marginTop: 16, color: "#666" }}>
                   正在生成中，请稍候...
                 </Paragraph>
               </div>
@@ -248,7 +256,7 @@ const DeepfakeGeneratePage = () => {
                 <Image
                   src={result.imageUrl}
                   alt="生成结果"
-                  style={{ width: '100%', borderRadius: 8 }}
+                  style={{ width: "100%", borderRadius: 8 }}
                   fallback="https://via.placeholder.com/512x512?text=Generated+Result"
                 />
                 <Alert
@@ -258,7 +266,10 @@ const DeepfakeGeneratePage = () => {
                   showIcon
                   style={{ marginTop: 16 }}
                 />
-                <Space style={{ marginTop: 16, width: '100%' }} direction="vertical">
+                <Space
+                  style={{ marginTop: 16, width: "100%" }}
+                  direction="vertical"
+                >
                   <Button type="primary" block onClick={handleSave}>
                     保存到内容管理
                   </Button>
@@ -271,16 +282,16 @@ const DeepfakeGeneratePage = () => {
             ) : (
               <div
                 style={{
-                  textAlign: 'center',
-                  padding: '80px 20px',
-                  background: '#fafafa',
+                  textAlign: "center",
+                  padding: "80px 20px",
+                  background: "#fafafa",
                   borderRadius: 8,
                 }}
               >
-                <Paragraph style={{ color: '#999' }}>
+                <Paragraph style={{ color: "#999" }}>
                   请配置参数并点击"开始生成"按钮
                 </Paragraph>
-                <Paragraph style={{ color: '#999', fontSize: 12 }}>
+                <Paragraph style={{ color: "#999", fontSize: 12 }}>
                   生成结果将在此处显示
                 </Paragraph>
               </div>
@@ -289,9 +300,7 @@ const DeepfakeGeneratePage = () => {
         </Col>
       </Row>
     </div>
-  )
-}
+  );
+};
 
-export default DeepfakeGeneratePage
-
-
+export default DeepfakeGeneratePage;
