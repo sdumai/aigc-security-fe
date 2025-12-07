@@ -21,6 +21,7 @@ import {
   UploadOutlined,
   PictureOutlined,
   VideoCameraOutlined,
+  DownloadOutlined,
 } from "@ant-design/icons";
 import type { UploadFile } from "antd";
 import request from "@/utils/request";
@@ -38,6 +39,22 @@ interface VideoResult {
   message: string;
 }
 
+// Mock 图像数据（示例图片 URL）
+const MOCK_IMAGES = [
+  "https://images.unsplash.com/photo-1620641788421-7a1c342ea42e?w=512&h=512&fit=crop",
+  "https://images.unsplash.com/photo-1635070041078-e363dbe005cb?w=512&h=512&fit=crop",
+  "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=512&h=512&fit=crop",
+  "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=512&h=512&fit=crop",
+  "https://images.unsplash.com/photo-1579783902614-a3fb3927b6a5?w=512&h=512&fit=crop",
+];
+
+// Mock 视频数据（示例视频 URL）
+const MOCK_VIDEOS = [
+  "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
+  "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4",
+  "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
+];
+
 const GeneralGeneratePage = () => {
   const navigate = useNavigate();
   const [imageForm] = Form.useForm();
@@ -54,11 +71,19 @@ const GeneralGeneratePage = () => {
       setImageLoading(true);
       setImageResult(null);
 
-      const response: any = await request.post("/generate/image", values);
-      setImageResult(response);
+      // 模拟生成延迟
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+
+      // 使用 mock 数据
+      const randomImage = MOCK_IMAGES[Math.floor(Math.random() * MOCK_IMAGES.length)];
+      setImageResult({
+        imageUrl: randomImage,
+        message: "图像生成成功！",
+      });
       message.success("图像生成成功！");
     } catch (error) {
       console.error("Generate error:", error);
+      message.error("生成失败，请重试");
     } finally {
       setImageLoading(false);
     }
@@ -70,24 +95,53 @@ const GeneralGeneratePage = () => {
       setVideoLoading(true);
       setVideoResult(null);
 
-      const formData = new FormData();
-      formData.append("prompt", values.prompt);
-      formData.append("duration", values.duration);
-      if (referenceImage.length > 0) {
-        formData.append("reference", referenceImage[0].originFileObj as File);
-      }
+      // 模拟生成延迟（视频生成时间更长）
+      await new Promise((resolve) => setTimeout(resolve, 3000));
 
-      const response: any = await request.post("/generate/video", formData, {
-        headers: {
-          "Content-Type": "multipart/form-data",
-        },
+      // 使用 mock 数据
+      const randomVideo = MOCK_VIDEOS[Math.floor(Math.random() * MOCK_VIDEOS.length)];
+      setVideoResult({
+        videoUrl: randomVideo,
+        message: "视频生成成功！",
       });
-      setVideoResult(response);
       message.success("视频生成成功！");
     } catch (error) {
       console.error("Generate error:", error);
+      message.error("生成失败，请重试");
     } finally {
       setVideoLoading(false);
+    }
+  };
+
+  const handleDownloadImage = async () => {
+    if (!imageResult?.imageUrl) return;
+
+    try {
+      message.loading("正在下载图像...", 0);
+      
+      // 使用 fetch 获取图片数据
+      const response = await fetch(imageResult.imageUrl);
+      const blob = await response.blob();
+      
+      // 创建 blob URL 并下载
+      const blobUrl = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = blobUrl;
+      link.download = `ai-generated-image-${Date.now()}.jpg`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      // 清理 blob URL
+      URL.revokeObjectURL(blobUrl);
+      
+      message.destroy();
+      message.success("图像下载成功！");
+    } catch (error) {
+      message.destroy();
+      console.error("Download error:", error);
+      window.open(imageResult.imageUrl, "_blank");
+      message.info("已在新标签页打开图像，请右键保存");
     }
   };
 
@@ -108,6 +162,38 @@ const GeneralGeneratePage = () => {
       }, 1500);
     } catch (error) {
       console.error("Save error:", error);
+    }
+  };
+
+  const handleDownloadVideo = async () => {
+    if (!videoResult?.videoUrl) return;
+
+    try {
+      message.loading("正在下载视频（可能需要较长时间）...", 0);
+      
+      // 使用 fetch 获取视频数据
+      const response = await fetch(videoResult.videoUrl);
+      const blob = await response.blob();
+      
+      // 创建 blob URL 并下载
+      const blobUrl = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = blobUrl;
+      link.download = `ai-generated-video-${Date.now()}.mp4`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      // 清理 blob URL
+      URL.revokeObjectURL(blobUrl);
+      
+      message.destroy();
+      message.success("视频下载成功！");
+    } catch (error) {
+      message.destroy();
+      console.error("Download error:", error);
+      window.open(videoResult.videoUrl, "_blank");
+      message.info("已在新标签页打开视频，请右键保存");
     }
   };
 
@@ -203,11 +289,16 @@ const GeneralGeneratePage = () => {
                 style={{ marginTop: 16, width: "100%" }}
                 direction="vertical"
               >
-                <Button type="primary" block onClick={handleSaveImage}>
-                  保存到内容管理
+                <Button
+                  type="primary"
+                  block
+                  icon={<DownloadOutlined />}
+                  onClick={handleDownloadImage}
+                >
+                  下载到本地
                 </Button>
-                <Button block icon={<UploadOutlined />}>
-                  下载图片
+                <Button block onClick={handleSaveImage}>
+                  保存到内容管理
                 </Button>
                 <Button block onClick={() => setImageResult(null)}>
                   重新生成
@@ -331,11 +422,16 @@ const GeneralGeneratePage = () => {
                 style={{ marginTop: 16, width: "100%" }}
                 direction="vertical"
               >
-                <Button type="primary" block onClick={handleSaveVideo}>
-                  保存到内容管理
+                <Button
+                  type="primary"
+                  block
+                  icon={<DownloadOutlined />}
+                  onClick={handleDownloadVideo}
+                >
+                  下载到本地
                 </Button>
-                <Button block icon={<UploadOutlined />}>
-                  下载视频
+                <Button block onClick={handleSaveVideo}>
+                  保存到内容管理
                 </Button>
                 <Button block onClick={() => setVideoResult(null)}>
                   重新生成

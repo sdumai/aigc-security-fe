@@ -20,12 +20,51 @@ import {
   CheckCircleOutlined,
   CloseCircleOutlined,
   ScanOutlined,
+  DownloadOutlined,
 } from "@ant-design/icons";
 import type { UploadFile, UploadProps } from "antd";
 import request from "@/utils/request";
 
 const { Title, Paragraph, Text } = Typography;
 const { Dragger } = Upload;
+
+// Mock 检测结果数据
+const MOCK_DETECTION_RESULTS = [
+  {
+    isFake: true,
+    confidence: 0.87,
+    model: "XceptionNet",
+    details: {
+      faceRegion: { x: 20, y: 15, width: 60, height: 70 },
+      artifacts: ["面部边界不自然", "光照不一致", "AI生成痕迹"],
+    },
+  },
+  {
+    isFake: false,
+    confidence: 0.15,
+    model: "EfficientNet-B4",
+    details: {
+      artifacts: [],
+    },
+  },
+  {
+    isFake: true,
+    confidence: 0.92,
+    model: "XceptionNet",
+    details: {
+      faceRegion: { x: 25, y: 20, width: 50, height: 65 },
+      artifacts: ["Deepfake特征", "面部纹理异常", "眼部反光不自然"],
+    },
+  },
+  {
+    isFake: false,
+    confidence: 0.08,
+    model: "ResNet-101",
+    details: {
+      artifacts: [],
+    },
+  },
+];
 
 interface DetectionResult {
   isFake: boolean;
@@ -75,18 +114,18 @@ const FakeDetectPage = () => {
       setLoading(true);
       setResult(null);
 
-      // 发送检测请求
-      const formData = new FormData();
-      formData.append("file", uploadedFile.originFileObj as File);
+      // 模拟检测延迟（1-2秒）
+      await new Promise((resolve) => setTimeout(resolve, 1500));
 
-      const response: any = await request.post("/detect/fake", formData, {
-        headers: {
-          "Content-Type": "multipart/form-data",
-        },
+      // 使用 mock 数据（随机选择一个结果）
+      const randomResult = MOCK_DETECTION_RESULTS[
+        Math.floor(Math.random() * MOCK_DETECTION_RESULTS.length)
+      ];
+      
+      setResult({
+        ...randomResult,
+        heatmapUrl: previewUrl, // 使用上传的图片作为热力图
       });
-
-      console.log("Detection response:", response);
-      setResult(response);
       message.success("检测完成！");
 
       // 滚动到结果区域
@@ -116,6 +155,53 @@ const FakeDetectPage = () => {
     setResult(null);
     setUploadedFile(null);
     setPreviewUrl("");
+  };
+
+  const handleDownloadReport = () => {
+    if (!result) return;
+
+    // 创建检测报告内容
+    const reportContent = `
+虚假内容检测报告
+==================
+
+检测时间：${new Date().toLocaleString("zh-CN")}
+文件名称：${uploadedFile?.name || "未知"}
+
+检测结果
+--------
+结论：${result.isFake ? "虚假内容" : "真实内容"}
+伪造概率：${Math.round(result.confidence * 100)}%
+检测模型：${result.model}
+
+${result.details.artifacts && result.details.artifacts.length > 0 ? `
+异常特征
+--------
+${result.details.artifacts.map((artifact, index) => `${index + 1}. ${artifact}`).join("\n")}
+` : ""}
+
+${result.details.faceRegion ? `
+可疑区域
+--------
+已检测到可疑的人脸区域，建议进一步核实。
+` : ""}
+
+---
+此报告由 AIGC 安全性研究与工具平台自动生成
+`;
+
+    // 创建并下载文本文件
+    const blob = new Blob([reportContent], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `fake-detection-report-${Date.now()}.txt`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    
+    message.success("检测报告已下载！");
   };
 
   return (
@@ -339,7 +425,14 @@ const FakeDetectPage = () => {
                   )}
 
                   <Space style={{ width: "100%" }} direction="vertical">
-                    <Button block>导出检测报告</Button>
+                    <Button 
+                      type="primary" 
+                      block 
+                      icon={<DownloadOutlined />}
+                      onClick={handleDownloadReport}
+                    >
+                      下载检测报告
+                    </Button>
                   </Space>
                 </Space>
               </div>

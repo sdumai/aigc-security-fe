@@ -21,12 +21,63 @@ import {
   CheckCircleOutlined,
   ExclamationCircleOutlined,
   SafetyOutlined,
+  DownloadOutlined,
 } from "@ant-design/icons";
 import type { UploadFile, UploadProps } from "antd";
 import request from "@/utils/request";
 
 const { Title, Paragraph, Text } = Typography;
 const { Dragger } = Upload;
+
+// Mock 不安全内容检测结果
+const MOCK_UNSAFE_RESULTS = [
+  {
+    violations: [],
+    risk: "low" as RiskLevel,
+    riskScore: 5,
+    suggestions: ["内容安全，可以正常发布"],
+    details: {},
+  },
+  {
+    violations: ["violence"],
+    risk: "medium" as RiskLevel,
+    riskScore: 45,
+    suggestions: ["建议模糊化暴力画面", "添加内容警告标识"],
+    details: {
+      violence: {
+        score: 0.45,
+        regions: [{ x: 30, y: 25, width: 40, height: 50 }],
+      },
+    },
+  },
+  {
+    violations: ["sensitive", "violence"],
+    risk: "high" as RiskLevel,
+    riskScore: 82,
+    suggestions: ["建议删除敏感内容", "不建议公开发布", "需要人工审核"],
+    details: {
+      sensitive: {
+        score: 0.78,
+        regions: [{ x: 20, y: 20, width: 60, height: 60 }],
+      },
+      violence: {
+        score: 0.65,
+      },
+    },
+  },
+  {
+    violations: ["sexual"],
+    risk: "high" as RiskLevel,
+    riskScore: 91,
+    suggestions: ["严重违规，禁止发布", "建议立即删除"],
+    details: {
+      sexual: {
+        score: 0.91,
+        regions: [{ x: 15, y: 10, width: 70, height: 80 }],
+      },
+    },
+  },
+];
 
 type RiskLevel = "low" | "medium" | "high";
 
@@ -110,18 +161,15 @@ const UnsafeDetectPage = () => {
       setLoading(true);
       setResult(null);
 
-      // 发送检测请求
-      const formData = new FormData();
-      formData.append("file", uploadedFile.originFileObj as File);
+      // 模拟检测延迟（1.5-2秒）
+      await new Promise((resolve) => setTimeout(resolve, 1800));
 
-      const response: any = await request.post("/detect/unsafe", formData, {
-        headers: {
-          "Content-Type": "multipart/form-data",
-        },
-      });
-
-      console.log("Detection response:", response);
-      setResult(response);
+      // 使用 mock 数据（随机选择一个结果）
+      const randomResult = MOCK_UNSAFE_RESULTS[
+        Math.floor(Math.random() * MOCK_UNSAFE_RESULTS.length)
+      ];
+      
+      setResult(randomResult);
       message.success("检测完成！");
 
       // 滚动到结果区域
@@ -151,6 +199,62 @@ const UnsafeDetectPage = () => {
     setResult(null);
     setUploadedFile(null);
     setPreviewUrl("");
+  };
+
+  const handleDownloadReport = () => {
+    if (!result) return;
+
+    // 创建不安全内容检测报告
+    const reportContent = `
+不安全内容检测报告
+==================
+
+检测时间：${new Date().toLocaleString("zh-CN")}
+文件名称：${uploadedFile?.name || "未知"}
+
+检测结果
+--------
+风险等级：${riskConfig[result.risk].text}
+风险评分：${result.riskScore}/100
+
+${result.violations.length > 0 ? `
+检测到的违规类型
+----------------
+${result.violations.map((v, i) => `${i + 1}. ${violationLabels[v] || v}`).join("\n")}
+
+详细分析
+--------
+${Object.entries(result.details).map(([key, value]) => {
+  return `${violationLabels[key] || key}：${Math.round(value.score * 100)}%${
+    value.regions && value.regions.length > 0 ? ` (检测到 ${value.regions.length} 处可疑区域)` : ""
+  }`;
+}).join("\n")}
+` : `
+内容安全状态
+------------
+未检测到违规内容，内容安全。
+`}
+
+处理建议
+--------
+${result.suggestions.map((s, i) => `${i + 1}. ${s}`).join("\n")}
+
+---
+此报告由 AIGC 安全性研究与工具平台自动生成
+`;
+
+    // 创建并下载文本文件
+    const blob = new Blob([reportContent], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `unsafe-detection-report-${Date.now()}.txt`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    
+    message.success("检测报告已下载！");
   };
 
   return (
@@ -411,7 +515,14 @@ const UnsafeDetectPage = () => {
                   )}
 
                   <Space style={{ width: "100%" }} direction="vertical">
-                    <Button block>导出检测报告</Button>
+                    <Button 
+                      type="primary" 
+                      block 
+                      icon={<DownloadOutlined />}
+                      onClick={handleDownloadReport}
+                    >
+                      下载检测报告
+                    </Button>
                   </Space>
                 </Space>
               </div>

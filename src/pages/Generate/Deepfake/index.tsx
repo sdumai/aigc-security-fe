@@ -16,11 +16,21 @@ import {
   Space,
   Alert,
 } from "antd";
-import { UploadOutlined, ThunderboltOutlined } from "@ant-design/icons";
+import { UploadOutlined, ThunderboltOutlined, DownloadOutlined } from "@ant-design/icons";
 import type { UploadFile } from "antd";
 import request from "@/utils/request";
 
 const { Title, Paragraph } = Typography;
+
+// Mock Deepfake 生成结果图片
+const MOCK_DEEPFAKE_RESULTS = [
+  "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=512&h=512&fit=crop",
+  "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=512&h=512&fit=crop",
+  "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=512&h=512&fit=crop",
+  "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=512&h=512&fit=crop",
+  "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=512&h=512&fit=crop",
+  "https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=512&h=512&fit=crop",
+];
 
 type FunctionType = "faceswap" | "fomm" | "stargan";
 type ModelType = "FaceShifter" | "SimSwap" | "FOMM" | "StarGAN";
@@ -63,24 +73,64 @@ const DeepfakeGeneratePage = () => {
       setResult(null);
 
       const values = form.getFieldsValue();
-      const formData = new FormData();
-      formData.append("target", targetFile[0].originFileObj as File);
-      formData.append("source", sourceFile[0].originFileObj as File);
-      formData.append("function", values.function);
-      formData.append("model", values.model);
+      
+      // 模拟生成延迟（2-3秒）
+      await new Promise((resolve) => setTimeout(resolve, 2500));
 
-      const response: any = await request.post("/generate/deepfake", formData, {
-        headers: {
-          "Content-Type": "multipart/form-data",
-        },
+      // 使用 mock 数据
+      const randomResult = MOCK_DEEPFAKE_RESULTS[Math.floor(Math.random() * MOCK_DEEPFAKE_RESULTS.length)];
+      const functionName = 
+        values.function === "faceswap" ? "人脸替换" :
+        values.function === "fomm" ? "人脸动画" : "属性编辑";
+      
+      setResult({
+        imageUrl: randomResult,
+        message: `使用 ${values.model} 模型完成${functionName}，效果逼真自然！`,
       });
-
-      setResult(response);
       message.success("生成成功！");
     } catch (error) {
       console.error("Generate error:", error);
+      message.error("生成失败，请重试");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDownload = async () => {
+    if (!result?.imageUrl) return;
+
+    const values = form.getFieldsValue();
+    const functionName = 
+      values.function === "faceswap" ? "faceswap" :
+      values.function === "fomm" ? "fomm" : "stargan";
+
+    try {
+      message.loading("正在下载...", 0);
+      
+      // 使用 fetch 获取图片数据，避免跨域问题
+      const response = await fetch(result.imageUrl);
+      const blob = await response.blob();
+      
+      // 创建 blob URL 并下载
+      const blobUrl = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = blobUrl;
+      link.download = `deepfake-${functionName}-${Date.now()}.jpg`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      // 清理 blob URL
+      URL.revokeObjectURL(blobUrl);
+      
+      message.destroy();
+      message.success("下载成功！");
+    } catch (error) {
+      message.destroy();
+      console.error("Download error:", error);
+      // 如果 fetch 失败，回退到直接打开链接
+      window.open(result.imageUrl, "_blank");
+      message.info("已在新标签页打开图片，请右键保存");
     }
   };
 
@@ -270,10 +320,17 @@ const DeepfakeGeneratePage = () => {
                   style={{ marginTop: 16, width: "100%" }}
                   direction="vertical"
                 >
-                  <Button type="primary" block onClick={handleSave}>
+                  <Button 
+                    type="primary" 
+                    block 
+                    icon={<DownloadOutlined />}
+                    onClick={handleDownload}
+                  >
+                    下载到本地
+                  </Button>
+                  <Button block onClick={handleSave}>
                     保存到内容管理
                   </Button>
-                  <Button block>下载结果</Button>
                   <Button block onClick={() => setResult(null)}>
                     重新生成
                   </Button>
