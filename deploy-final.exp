@@ -1,0 +1,84 @@
+#!/usr/bin/expect -f
+
+set timeout 300
+set remote_host "10.102.32.144"
+set remote_user "lab426"
+set remote_pass "426"
+set remote_dir "aigc-security-platform"
+
+puts "🚀 开始部署到远程服务器..."
+
+# 1. 创建远程目录
+puts "📁 创建远程目录..."
+spawn ssh -o StrictHostKeyChecking=no ${remote_user}@${remote_host} "mkdir -p ~/${remote_dir}"
+expect {
+    "password:" {
+        send "${remote_pass}\r"
+        exp_continue
+    }
+    eof
+}
+
+# 2. 上传dist文件夹
+puts "📦 上传构建文件..."
+spawn bash -c "cd dist && tar czf - . | ssh -o StrictHostKeyChecking=no ${remote_user}@${remote_host} 'cd ~/${remote_dir} && tar xzf -'"
+expect {
+    "password:" {
+        send "${remote_pass}\r"
+        exp_continue
+    }
+    eof
+}
+
+# 3. 在远程服务器上启动服务
+puts "🔧 配置并启动服务..."
+spawn ssh -o StrictHostKeyChecking=no ${remote_user}@${remote_host}
+expect {
+    "password:" {
+        send "${remote_pass}\r"
+    }
+}
+
+expect "$ " {
+    send "cd ~/${remote_dir}\r"
+}
+
+expect "$ " {
+    send "which http-server\r"
+}
+
+expect {
+    "http-server" {
+        puts "http-server 已安装"
+    }
+    "$ " {
+        puts "安装 http-server..."
+        send "npm install -g http-server\r"
+        expect "$ "
+    }
+}
+
+expect "$ " {
+    send "tmux kill-session -t aigc-security 2>/dev/null || true\r"
+}
+
+expect "$ " {
+    send "tmux new-session -d -s aigc-security 'http-server . -p 5670 -a 0.0.0.0'\r"
+}
+
+expect "$ " {
+    send "echo '✅ 服务已启动在 tmux 会话 aigc-security 中'\r"
+}
+
+expect "$ " {
+    send "exit\r"
+}
+
+expect eof
+
+puts "\n✅ 部署完成！"
+puts "🌐 访问地址: http://10.102.32.144:5670"
+puts "📋 查看服务: ssh lab426@10.102.32.144 'tmux attach -t aigc-security'"
+
+
+

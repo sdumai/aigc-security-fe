@@ -14,6 +14,8 @@ import {
   Button,
   Divider,
   List,
+  Input,
+  Tabs,
 } from "antd";
 import {
   UploadOutlined,
@@ -22,9 +24,9 @@ import {
   ExclamationCircleOutlined,
   SafetyOutlined,
   DownloadOutlined,
+  LinkOutlined,
 } from "@ant-design/icons";
 import type { UploadFile, UploadProps } from "antd";
-import request from "@/utils/request";
 
 const { Title, Paragraph, Text } = Typography;
 const { Dragger } = Upload;
@@ -134,6 +136,8 @@ const UnsafeDetectPage = () => {
   const [result, setResult] = useState<DetectionResult | null>(null);
   const [uploadedFile, setUploadedFile] = useState<UploadFile | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string>("");
+  const [urlInput, setUrlInput] = useState<string>("");
+  const [activeTab, setActiveTab] = useState<string>("upload");
 
   const handleUpload: UploadProps["customRequest"] = async (options) => {
     const { file } = options;
@@ -148,6 +152,40 @@ const UnsafeDetectPage = () => {
     } catch (error) {
       console.error("Upload error:", error);
       message.error("上传失败，请重试");
+    }
+  };
+
+  const handleUrlLoad = async () => {
+    if (!urlInput.trim()) {
+      message.warning("请输入URL地址");
+      return;
+    }
+
+    // 验证URL格式
+    try {
+      new URL(urlInput);
+    } catch {
+      message.error("URL格式不正确，请输入有效的URL");
+      return;
+    }
+
+    try {
+      setLoading(true);
+      // 这里可以实际调用API来获取远程文件
+      // 暂时使用URL作为预览
+      setPreviewUrl(urlInput);
+      setUploadedFile({ 
+        uid: '-1', 
+        name: urlInput.split('/').pop() || 'remote-file',
+        status: 'done',
+        url: urlInput,
+      } as UploadFile);
+      message.success("URL加载成功，请点击开始检测");
+    } catch (error) {
+      console.error("URL load error:", error);
+      message.error("URL加载失败，请检查地址是否正确");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -169,7 +207,7 @@ const UnsafeDetectPage = () => {
         Math.floor(Math.random() * MOCK_UNSAFE_RESULTS.length)
       ];
       
-      setResult(randomResult);
+      setResult(randomResult as unknown as DetectionResult);
       message.success("检测完成！");
 
       // 滚动到结果区域
@@ -199,6 +237,7 @@ const UnsafeDetectPage = () => {
     setResult(null);
     setUploadedFile(null);
     setPreviewUrl("");
+    setUrlInput("");
   };
 
   const handleDownloadReport = () => {
@@ -280,28 +319,86 @@ ${result.suggestions.map((s, i) => `${i + 1}. ${s}`).join("\n")}
       <Row gutter={24}>
         <Col xs={24} lg={12}>
           <Card title="上传检测内容" bordered={false}>
-            {!uploadedFile && (
-              <Dragger {...uploadProps} style={{ padding: "40px 20px" }}>
-                <p className="ant-upload-drag-icon">
-                  <UploadOutlined style={{ fontSize: 48, color: "#1890ff" }} />
-                </p>
-                <p className="ant-upload-text" style={{ fontSize: 18 }}>
-                  点击或拖拽文件到此区域上传
-                </p>
-                <p className="ant-upload-hint">
-                  支持图片（JPG、PNG）或视频（MP4、AVI）格式
-                </p>
-              </Dragger>
-            )}
+            <Tabs
+              activeKey={activeTab}
+              onChange={setActiveTab}
+              items={[
+                {
+                  key: 'upload',
+                  label: (
+                    <span>
+                      <UploadOutlined /> 本地上传
+                    </span>
+                  ),
+                  children: (
+                    <>
+                      {!uploadedFile && (
+                        <Dragger {...uploadProps} style={{ padding: "40px 20px" }}>
+                          <p className="ant-upload-drag-icon">
+                            <UploadOutlined style={{ fontSize: 48, color: "#1890ff" }} />
+                          </p>
+                          <p className="ant-upload-text" style={{ fontSize: 18 }}>
+                            点击或拖拽文件到此区域上传
+                          </p>
+                          <p className="ant-upload-hint">
+                            支持图片（JPG、PNG）或视频（MP4、AVI）格式
+                          </p>
+                        </Dragger>
+                      )}
 
-            {uploadedFile && previewUrl && (
-              <Image
-                src={previewUrl}
-                alt="上传的内容"
-                style={{ width: "100%", borderRadius: 8 }}
-                preview={false}
-              />
-            )}
+                      {uploadedFile && previewUrl && activeTab === 'upload' && (
+                        <Image
+                          src={previewUrl}
+                          alt="上传的内容"
+                          style={{ width: "100%", borderRadius: 8 }}
+                          preview={false}
+                        />
+                      )}
+                    </>
+                  ),
+                },
+                {
+                  key: 'url',
+                  label: (
+                    <span>
+                      <LinkOutlined /> URL解析
+                    </span>
+                  ),
+                  children: (
+                    <>
+                      <Space.Compact style={{ width: '100%', marginBottom: 16 }}>
+                        <Input
+                          size="large"
+                          placeholder="请输入图片或视频的URL地址，例如：https://example.com/image.jpg"
+                          value={urlInput}
+                          onChange={(e) => setUrlInput(e.target.value)}
+                          onPressEnter={handleUrlLoad}
+                          disabled={loading}
+                        />
+                        <Button 
+                          type="primary" 
+                          size="large"
+                          onClick={handleUrlLoad}
+                          loading={loading}
+                          icon={<LinkOutlined />}
+                        >
+                          加载
+                        </Button>
+                      </Space.Compact>
+
+                      {uploadedFile && previewUrl && activeTab === 'url' && (
+                        <Image
+                          src={previewUrl}
+                          alt="URL内容"
+                          style={{ width: "100%", borderRadius: 8 }}
+                          preview={false}
+                        />
+                      )}
+                    </>
+                  ),
+                },
+              ]}
+            />
 
             <Space
               direction="vertical"

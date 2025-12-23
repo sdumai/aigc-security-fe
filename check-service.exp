@@ -1,0 +1,32 @@
+#!/usr/bin/expect -f
+
+set timeout 30
+set remote_host "10.102.32.144"
+set remote_user "lab426"
+set remote_pass "426"
+
+puts "🔍 检查远程服务状态..."
+
+spawn ssh -o StrictHostKeyChecking=no ${remote_user}@${remote_host}
+expect {
+    "password:" {
+        send "${remote_pass}\r"
+    }
+}
+
+expect "$ " {
+    send "tmux ls | grep aigc-security\r"
+}
+
+expect "$ " {
+    send "curl -s http://localhost:5670 | head -20\r"
+}
+
+expect "$ " {
+    send "exit\r"
+}
+
+expect eof
+
+
+

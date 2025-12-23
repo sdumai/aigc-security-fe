@@ -26,7 +26,7 @@ import {
 import type { UploadFile } from "antd";
 import request from "@/utils/request";
 
-const { Title, Paragraph, Text } = Typography;
+const { Title, Paragraph } = Typography;
 const { TextArea } = Input;
 
 interface ImageResult {
@@ -67,7 +67,7 @@ const GeneralGeneratePage = () => {
 
   const handleImageGenerate = async () => {
     try {
-      const values = await imageForm.validateFields();
+      await imageForm.validateFields();
       setImageLoading(true);
       setImageResult(null);
 
@@ -91,7 +91,7 @@ const GeneralGeneratePage = () => {
 
   const handleVideoGenerate = async () => {
     try {
-      const values = await videoForm.validateFields();
+      await videoForm.validateFields();
       setVideoLoading(true);
       setVideoResult(null);
 

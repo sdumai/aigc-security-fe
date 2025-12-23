@@ -1,0 +1,84 @@
+#!/usr/bin/expect -f
+
+set timeout 120
+set remote_host "10.102.32.144"
+set remote_user "lab426"
+set remote_pass "426"
+
+puts "🔧 安装http-server并启动服务..."
+
+spawn ssh -o StrictHostKeyChecking=no ${remote_user}@${remote_host}
+expect {
+    "password:" {
+        send "${remote_pass}\r"
+    }
+}
+
+expect "$ " {
+    send "which node\r"
+}
+
+expect "$ " {
+    send "which npm\r"
+}
+
+expect "$ " {
+    send "which npx\r"
+}
+
+expect "$ " {
+    send "cd ~/aigc-security-platform\r"
+}
+
+expect "$ " {
+    send "tmux kill-session -t aigc-security 2>/dev/null || true\r"
+}
+
+expect "$ " {
+    send "tmux new-session -d -s aigc-security\r"
+}
+
+expect "$ " {
+    send "tmux send-keys -t aigc-security 'cd ~/aigc-security-platform' C-m\r"
+}
+
+expect "$ " {
+    send "tmux send-keys -t aigc-security 'npx -y http-server . -p 5670 -a 0.0.0.0' C-m\r"
+}
+
+expect "$ " {
+    send "echo '等待服务启动...'\r"
+}
+
+expect "$ " {
+    send "sleep 10\r"
+}
+
+expect "$ " {
+    send "tmux capture-pane -t aigc-security -p | tail -20\r"
+}
+
+expect "$ " {
+    send "curl -I http://localhost:5670 2>&1 | head -5\r"
+}
+
+expect "$ " {
+    send "echo '\\n✅ 服务启动完成！'\r"
+}
+
+expect "$ " {
+    send "echo '📡 访问地址: http://10.102.32.144:5670'\r"
+}
+
+expect "$ " {
+    send "echo '📋 查看服务: tmux attach -t aigc-security'\r"
+}
+
+expect "$ " {
+    send "exit\r"
+}
+
+expect eof
+
+
+

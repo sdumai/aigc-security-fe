@@ -1,4 +1,4 @@
-import { Card, Row, Col, Button, Typography, Space, Divider } from "antd";
+import { Card, Row, Col, Button, Typography, Space } from "antd";
 import { useNavigate } from "react-router-dom";
 import {
   ThunderboltOutlined,
@@ -22,8 +22,7 @@ const HomePage = () => {
     {
       icon: <ThunderboltOutlined style={{ fontSize: 56, color: "#1890ff" }} />,
       title: "AIGC 内容生成",
-      description:
-        "支持 Deepfake 人脸生成、人脸动画、属性编辑，以及多模态图像和视频生成能力",
+      description: "支持 Deepfake 人脸生成、人脸动画、属性编辑，以及多模态图像和视频生成能力",
       link: "/generate/deepfake",
       gradient: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
       stats: "5+ 模型",
@@ -31,8 +30,7 @@ const HomePage = () => {
     {
       icon: <ScanOutlined style={{ fontSize: 56, color: "#52c41a" }} />,
       title: "AIGC 内容检测",
-      description:
-        "提供虚假内容检测和不安全内容检测，识别深度伪造、暴力、色情等违规内容",
+      description: "提供虚假内容检测和不安全内容检测，识别深度伪造、暴力、色情等违规内容",
       link: "/detect/fake",
       gradient: "linear-gradient(135deg, #f093fb 0%, #f5576c 100%)",
       stats: "95%+ 准确率",
@@ -80,10 +78,7 @@ const HomePage = () => {
         }}
       >
         <RocketOutlined style={{ fontSize: 64, marginBottom: 20 }} />
-        <Title
-          level={1}
-          style={{ color: "white", marginBottom: 16, fontSize: 42 }}
-        >
+        <Title level={1} style={{ color: "white", marginBottom: 16, fontSize: 42 }}>
           AIGC 安全性研究与工具平台
         </Title>
         <Paragraph
@@ -95,8 +90,7 @@ const HomePage = () => {
             margin: "0 auto 32px",
           }}
         >
-          专注于 AI
-          生成内容的安全性研究，提供内容生成、虚假检测、安全审核等完整工具链
+          专注于 AI 生成内容的安全性研究，提供内容生成、虚假检测、安全审核等完整工具链
         </Paragraph>
         <Space size="large">
           <Button
@@ -159,15 +153,9 @@ const HomePage = () => {
                   marginBottom: 24,
                 }}
               >
-                <div style={{ filter: "brightness(0) invert(1)" }}>
-                  {feature.icon}
-                </div>
+                <div style={{ filter: "brightness(0) invert(1)" }}>{feature.icon}</div>
               </div>
-              <Space
-                direction="vertical"
-                size="middle"
-                style={{ width: "100%", padding: "0 24px 24px" }}
-              >
+              <Space direction="vertical" size="middle" style={{ width: "100%", padding: "0 24px 24px" }}>
                 <div>
                   <Title level={4} style={{ marginBottom: 8 }}>
                     {feature.title}
@@ -176,11 +164,7 @@ const HomePage = () => {
                     {feature.stats}
                   </Text>
                 </div>
-                <Paragraph
-                  style={{ color: "#666", marginBottom: 16, minHeight: 66 }}
-                >
-                  {feature.description}
-                </Paragraph>
+                <Paragraph style={{ color: "#666", marginBottom: 16, minHeight: 66 }}>{feature.description}</Paragraph>
                 <Button
                   type="link"
                   block
@@ -223,8 +207,7 @@ const HomePage = () => {
                   borderRadius: 12,
                   border: "2px solid #f0f0f0",
                   fontWeight: 600,
-                  background:
-                    "linear-gradient(135deg, #fdfbfb 0%, #ebedee 100%)",
+                  background: "linear-gradient(135deg, #fdfbfb 0%, #ebedee 100%)",
                 }}
               >
                 {action.title}
@@ -258,13 +241,8 @@ const HomePage = () => {
                 boxShadow: "0 2px 8px rgba(0, 0, 0, 0.06)",
               }}
             >
-              <ThunderboltOutlined
-                style={{ fontSize: 40, color: "#1890ff", marginBottom: 12 }}
-              />
-              <Title
-                level={2}
-                style={{ color: "#1890ff", marginBottom: 8, fontSize: 36 }}
-              >
+              <ThunderboltOutlined style={{ fontSize: 40, color: "#1890ff", marginBottom: 12 }} />
+              <Title level={2} style={{ color: "#1890ff", marginBottom: 8, fontSize: 36 }}>
                 5+
               </Title>
               <Text strong>主流生成模型</Text>
@@ -280,13 +258,8 @@ const HomePage = () => {
                 boxShadow: "0 2px 8px rgba(0, 0, 0, 0.06)",
               }}
             >
-              <SafetyCertificateOutlined
-                style={{ fontSize: 40, color: "#52c41a", marginBottom: 12 }}
-              />
-              <Title
-                level={2}
-                style={{ color: "#52c41a", marginBottom: 8, fontSize: 36 }}
-              >
+              <SafetyCertificateOutlined style={{ fontSize: 40, color: "#52c41a", marginBottom: 12 }} />
+              <Title level={2} style={{ color: "#52c41a", marginBottom: 8, fontSize: 36 }}>
                 95%+
               </Title>
               <Text strong>检测准确率</Text>
@@ -302,13 +275,8 @@ const HomePage = () => {
                 boxShadow: "0 2px 8px rgba(0, 0, 0, 0.06)",
               }}
             >
-              <RocketOutlined
-                style={{ fontSize: 40, color: "#722ed1", marginBottom: 12 }}
-              />
-              <Title
-                level={2}
-                style={{ color: "#722ed1", marginBottom: 8, fontSize: 36 }}
-              >
+              <RocketOutlined style={{ fontSize: 40, color: "#722ed1", marginBottom: 12 }} />
+              <Title level={2} style={{ color: "#722ed1", marginBottom: 8, fontSize: 36 }}>
                 &lt;2s
               </Title>
               <Text strong>平均响应时间</Text>
@@ -324,13 +292,8 @@ const HomePage = () => {
                 boxShadow: "0 2px 8px rgba(0, 0, 0, 0.06)",
               }}
             >
-              <SafetyOutlined
-                style={{ fontSize: 40, color: "#fa8c16", marginBottom: 12 }}
-              />
-              <Title
-                level={2}
-                style={{ color: "#fa8c16", marginBottom: 8, fontSize: 36 }}
-              >
+              <SafetyOutlined style={{ fontSize: 40, color: "#fa8c16", marginBottom: 12 }} />
+              <Title level={2} style={{ color: "#fa8c16", marginBottom: 8, fontSize: 36 }}>
                 100%
               </Title>
               <Text strong>数据安全保护</Text>

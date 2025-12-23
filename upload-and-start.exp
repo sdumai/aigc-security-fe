@@ -1,0 +1,63 @@
+#!/usr/bin/expect -f
+
+set timeout 60
+set remote_host "10.102.32.144"
+set remote_user "lab426"
+set remote_pass "426"
+
+puts "📤 上传启动脚本..."
+
+# 上传启动脚本
+spawn scp -o StrictHostKeyChecking=no start.sh ${remote_user}@${remote_host}:~/aigc-security-platform/
+expect {
+    "password:" {
+        send "${remote_pass}\r"
+    }
+}
+expect eof
+
+puts "🚀 执行启动脚本..."
+
+# SSH到服务器并执行启动脚本
+spawn ssh -o StrictHostKeyChecking=no ${remote_user}@${remote_host}
+expect {
+    "password:" {
+        send "${remote_pass}\r"
+    }
+}
+
+expect "$ " {
+    send "cd ~/aigc-security-platform\r"
+}
+
+expect "$ " {
+    send "chmod +x start.sh\r"
+}
+
+expect "$ " {
+    send "./start.sh\r"
+}
+
+expect "$ " {
+    send "sleep 3\r"
+}
+
+expect "$ " {
+    send "tmux ls\r"
+}
+
+expect "$ " {
+    send "curl -I http://localhost:5670\r"
+}
+
+expect "$ " {
+    send "exit\r"
+}
+
+expect eof
+
+puts "\n✅ 部署完成！"
+puts "🌐 访问地址: http://10.102.32.144:5670"
+
+
+

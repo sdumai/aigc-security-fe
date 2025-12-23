@@ -1,0 +1,62 @@
+#!/usr/bin/expect -f
+
+set timeout 30
+set remote_host "10.102.32.144"
+set remote_user "lab426"
+set remote_pass "426"
+
+puts "🔄 重新启动服务..."
+
+spawn ssh -o StrictHostKeyChecking=no ${remote_user}@${remote_host}
+expect {
+    "password:" {
+        send "${remote_pass}\r"
+    }
+}
+
+expect "$ " {
+    send "cd ~/aigc-security-platform\r"
+}
+
+expect "$ " {
+    send "ls -la\r"
+}
+
+expect "$ " {
+    send "tmux kill-session -t aigc-security 2>/dev/null; echo 'Killed old session'\r"
+}
+
+expect "$ " {
+    send "tmux new-session -d -s aigc-security 'http-server . -p 5670 -a 0.0.0.0'\r"
+}
+
+expect "$ " {
+    send "sleep 2\r"
+}
+
+expect "$ " {
+    send "tmux ls\r"
+}
+
+expect "$ " {
+    send "netstat -tlnp | grep 5670 || ss -tlnp | grep 5670\r"
+}
+
+expect "$ " {
+    send "curl -s http://localhost:5670 | head -10\r"
+}
+
+expect "$ " {
+    send "echo '\\n✅ 服务状态检查完成'\r"
+}
+
+expect "$ " {
+    send "exit\r"
+}
+
+expect eof
+
+puts "\n📝 提示: 如需查看tmux会话，运行: ssh lab426@10.102.32.144 'tmux attach -t aigc-security'"
+
+
+

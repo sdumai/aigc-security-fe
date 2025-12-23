@@ -1,0 +1,40 @@
+#!/usr/bin/expect -f
+
+set timeout 30
+set remote_host "10.102.32.144"
+set remote_user "lab426"
+set remote_pass "426"
+
+puts "🔍 检查tmux会话状态..."
+
+spawn ssh -o StrictHostKeyChecking=no ${remote_user}@${remote_host}
+expect {
+    "password:" {
+        send "${remote_pass}\r"
+    }
+}
+
+expect "$ " {
+    send "tmux capture-pane -t aigc-security -p\r"
+}
+
+expect "$ " {
+    send "sleep 5\r"
+}
+
+expect "$ " {
+    send "curl -I http://localhost:5670 2>&1\r"
+}
+
+expect "$ " {
+    send "ps aux | grep http-server | grep -v grep\r"
+}
+
+expect "$ " {
+    send "exit\r"
+}
+
+expect eof
+
+
+

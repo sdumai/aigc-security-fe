@@ -1,0 +1,106 @@
+#!/usr/bin/expect -f
+
+set timeout 300
+set password "shixu"
+set server_user "shixu"
+set server_host "10.102.33.11"
+set local_path "/Users/shixu.mai/Desktop/aigc-security"
+
+puts "====================================="
+puts "开始部署 AIGC Security 项目"
+puts "目标服务器: $server_host"
+puts "访问地址: http://10.102.32.144:5670"
+puts "====================================="
+
+# 步骤 1: 传输文件
+puts "\n步骤 1: 传输项目文件到服务器..."
+spawn rsync -avz --progress --exclude node_modules --exclude .git --exclude dist --exclude .cursor $local_path/ $server_user@$server_host:~/aigc-security/
+
+expect {
+    "password:" {
+        send "$password\r"
+        exp_continue
+    }
+    "yes/no" {
+        send "yes\r"
+        exp_continue
+    }
+    eof
+}
+
+wait
+if {[lindex $? 0] != 0} {
+    puts "❌ 文件传输失败！"
+    exit 1
+}
+
+puts "✅ 文件传输完成"
+
+# 步骤 2: 在服务器上部署
+puts "\n步骤 2: 在服务器上安装依赖并启动服务..."
+
+spawn ssh $server_user@$server_host
+
+expect {
+    "password:" {
+        send "$password\r"
+    }
+    "yes/no" {
+        send "yes\r"
+        exp_continue
+    }
+}
+
+expect "$ " {
+    send "cd ~/aigc-security\r"
+}
+
+expect "$ " {
+    send "node --version\r"
+}
+
+expect "$ " {
+    send "npm --version\r"
+}
+
+expect "$ " {
+    send "npm install\r"
+}
+
+expect {
+    "$ " {
+        send "pkill -f vite || true\r"
+    }
+    timeout {
+        puts "npm install 超时"
+    }
+}
+
+expect "$ " {
+    send "sleep 2\r"
+}
+
+expect "$ " {
+    send "nohup npm run dev > app.log 2>&1 &\r"
+}
+
+expect "$ " {
+    send "sleep 5\r"
+}
+
+expect "$ " {
+    send "if lsof -ti:5670 > /dev/null; then echo '✅ 服务已成功启动'; else echo '❌ 服务启动失败'; fi\r"
+}
+
+expect "$ " {
+    send "exit\r"
+}
+
+expect eof
+
+puts "\n====================================="
+puts "✅ 部署完成！"
+puts "访问地址: http://10.102.32.144:5670"
+puts "====================================="
+
+

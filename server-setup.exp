@@ -1,0 +1,81 @@
+#!/usr/bin/expect -f
+
+set timeout 600
+set password "shixu"
+
+puts "\n====================================="
+puts "在服务器上安装依赖并启动服务"
+puts "====================================="
+
+spawn ssh shixu@10.102.33.11
+
+expect {
+    "password:" {
+        send "$password\r"
+    }
+    "yes/no" {
+        send "yes\r"
+        exp_continue
+    }
+}
+
+expect "$ "
+send "cd ~/aigc-security\r"
+
+expect "$ "
+send "echo '检查环境...'\r"
+
+expect "$ "
+send "node --version\r"
+
+expect "$ "
+send "npm --version\r"
+
+expect "$ "
+send "echo '安装依赖...'\r"
+
+expect "$ "
+send "npm install\r"
+
+expect {
+    "$ " {
+        send "echo '停止旧进程...'\r"
+    }
+    timeout {
+        puts "\n⚠️ npm install 可能需要更长时间..."
+        exp_continue
+    }
+}
+
+expect "$ "
+send "pkill -f 'vite' 2>/dev/null || true\r"
+
+expect "$ "
+send "sleep 3\r"
+
+expect "$ "
+send "echo '启动服务...'\r"
+
+expect "$ "
+send "nohup npm run dev > app.log 2>&1 &\r"
+
+expect "$ "
+send "sleep 5\r"
+
+expect "$ "
+send "if lsof -ti:5670 > /dev/null 2>&1; then echo '✅ 服务已成功启动在端口 5670'; else echo '❌ 服务启动失败，查看日志'; fi\r"
+
+expect "$ "
+send "tail -5 app.log\r"
+
+expect "$ "
+send "exit\r"
+
+expect eof
+
+puts "\n====================================="
+puts "✅ 部署完成！"
+puts "访问地址: http://10.102.32.144:5670"
+puts "====================================="
+
+

@@ -248,9 +248,10 @@ const DeepfakeGeneratePage = () => {
               >
                 <Radio.Group
                   onChange={(e) => {
-                    setFunctionType(e.target.value);
+                    const newType = e.target.value as FunctionType;
+                    setFunctionType(newType);
                     form.setFieldsValue({
-                      model: modelOptions[e.target.value][0],
+                      model: modelOptions[newType][0],
                     });
                   }}
                 >

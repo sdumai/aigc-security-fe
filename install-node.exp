@@ -1,0 +1,73 @@
+#!/usr/bin/expect -f
+
+set timeout 600
+set password "shixu"
+
+puts "\n====================================="
+puts "在服务器上安装 Node.js 和 npm"
+puts "====================================="
+
+spawn ssh shixu@10.102.33.11
+
+expect {
+    "password:" {
+        send "$password\r"
+    }
+}
+
+expect "$ "
+send "echo '下载 Node.js 安装脚本...'\r"
+
+expect "$ "
+send "curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -S bash -\r"
+
+expect {
+    "password" {
+        send "$password\r"
+        exp_continue
+    }
+    "$ " {
+        send "echo '安装 Node.js...'\r"
+    }
+    timeout {
+        puts "等待下载..."
+        exp_continue
+    }
+}
+
+expect "$ "
+send "sudo -S apt-get install -y nodejs\r"
+
+expect {
+    "password" {
+        send "$password\r"
+        exp_continue
+    }
+    "$ " {
+        send "echo '验证安装...'\r"
+    }
+    timeout {
+        puts "等待安装..."
+        exp_continue
+    }
+}
+
+expect "$ "
+send "node --version\r"
+
+expect "$ "
+send "npm --version\r"
+
+expect "$ "
+send "echo '✅ Node.js 安装完成'\r"
+
+expect "$ "
+send "exit\r"
+
+expect eof
+
+puts "\n====================================="
+puts "Node.js 安装完成！"
+puts "====================================="
+
+
