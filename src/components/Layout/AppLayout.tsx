@@ -51,7 +51,7 @@ const menuItems: MenuItem[] = [
       {
         key: "/detect/unsafe",
         icon: <SafetyOutlined />,
-        label: "不安全内容检测",
+        label: "敏感内容检测",
       },
     ],
   },
@@ -173,9 +173,7 @@ const AppLayout = ({ children }: AppLayoutProps) => {
             >
               AI 生成
             </div>
-            <div style={{ fontSize: 15, fontWeight: 700, lineHeight: 1.2 }}>
-              5+
-            </div>
+            <div style={{ fontSize: 15, fontWeight: 700, lineHeight: 1.2 }}>5+</div>
           </div>
           <div
             style={{
@@ -200,9 +198,7 @@ const AppLayout = ({ children }: AppLayoutProps) => {
             >
               准确率
             </div>
-            <div style={{ fontSize: 15, fontWeight: 700, lineHeight: 1.2 }}>
-              95%+
-            </div>
+            <div style={{ fontSize: 15, fontWeight: 700, lineHeight: 1.2 }}>95%+</div>
           </div>
           <div
             style={{
@@ -227,9 +223,7 @@ const AppLayout = ({ children }: AppLayoutProps) => {
             >
               响应
             </div>
-            <div style={{ fontSize: 15, fontWeight: 700, lineHeight: 1.2 }}>
-              &lt;2s
-            </div>
+            <div style={{ fontSize: 15, fontWeight: 700, lineHeight: 1.2 }}>&lt;2s</div>
           </div>
         </div>
       </Header>

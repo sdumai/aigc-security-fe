@@ -16,6 +16,7 @@ import {
   Divider,
   Input,
   Tabs,
+  Checkbox,
 } from "antd";
 import {
   UploadOutlined,
@@ -30,42 +31,12 @@ import type { UploadFile, UploadProps } from "antd";
 const { Title, Paragraph, Text } = Typography;
 const { Dragger } = Upload;
 
-// Mock 检测结果数据
-const MOCK_DETECTION_RESULTS = [
-  {
-    isFake: true,
-    confidence: 0.87,
-    model: "XceptionNet",
-    details: {
-      faceRegion: { x: 20, y: 15, width: 60, height: 70 },
-      artifacts: ["面部边界不自然", "光照不一致", "AI生成痕迹"],
-    },
-  },
-  {
-    isFake: false,
-    confidence: 0.15,
-    model: "EfficientNet-B4",
-    details: {
-      artifacts: [],
-    },
-  },
-  {
-    isFake: true,
-    confidence: 0.92,
-    model: "XceptionNet",
-    details: {
-      faceRegion: { x: 25, y: 20, width: 50, height: 65 },
-      artifacts: ["Deepfake特征", "面部纹理异常", "眼部反光不自然"],
-    },
-  },
-  {
-    isFake: false,
-    confidence: 0.08,
-    model: "ResNet-101",
-    details: {
-      artifacts: [],
-    },
-  },
+// 可选的检测模型
+const DETECTION_MODELS = [
+  { value: "XceptionNet", label: "XceptionNet", description: "基于Xception架构的Deepfake检测模型" },
+  { value: "EfficientNet-B4", label: "EfficientNet-B4", description: "高效的卷积神经网络模型" },
+  { value: "ResNet-101", label: "ResNet-101", description: "深度残差网络，适用于人脸伪造检测" },
+  { value: "FaceForensics++", label: "FaceForensics++", description: "专门的人脸伪造检测数据集训练模型" },
 ];
 
 interface DetectionResult {
@@ -91,6 +62,8 @@ const FakeDetectPage = () => {
   const [previewUrl, setPreviewUrl] = useState<string>("");
   const [urlInput, setUrlInput] = useState<string>("");
   const [activeTab, setActiveTab] = useState<string>("upload");
+  const [selectedModels, setSelectedModels] = useState<string[]>(["XceptionNet"]); // 默认选中第一个
+  const [currentStep, setCurrentStep] = useState<number>(1); // 1: 上传, 2: 选择方法, 3: 检测结果
 
   const handleUpload: UploadProps["customRequest"] = async (options) => {
     const { file } = options;
@@ -101,7 +74,8 @@ const FakeDetectPage = () => {
       // 创建预览 URL
       const url = URL.createObjectURL(uploadFile);
       setPreviewUrl(url);
-      message.success("文件上传成功，请点击开始检测");
+      setCurrentStep(2); // 上传成功后进入选择检测方法步骤
+      message.success("文件上传成功，请选择检测方法");
     } catch (error) {
       console.error("Upload error:", error);
       message.error("上传失败，请重试");
@@ -127,13 +101,14 @@ const FakeDetectPage = () => {
       // 这里可以实际调用API来获取远程文件
       // 暂时使用URL作为预览
       setPreviewUrl(urlInput);
-      setUploadedFile({ 
-        uid: '-1', 
-        name: urlInput.split('/').pop() || 'remote-file',
-        status: 'done',
+      setUploadedFile({
+        uid: "-1",
+        name: urlInput.split("/").pop() || "remote-file",
+        status: "done",
         url: urlInput,
       } as UploadFile);
-      message.success("URL加载成功，请点击开始检测");
+      setCurrentStep(2); // URL加载成功后进入选择检测方法步骤
+      message.success("URL加载成功，请选择检测方法");
     } catch (error) {
       console.error("URL load error:", error);
       message.error("URL加载失败，请检查地址是否正确");
@@ -148,6 +123,11 @@ const FakeDetectPage = () => {
       return;
     }
 
+    if (selectedModels.length === 0) {
+      message.warning("请至少选择一个检测模型");
+      return;
+    }
+
     try {
       setLoading(true);
       setResult(null);
@@ -155,16 +135,50 @@ const FakeDetectPage = () => {
       // 模拟检测延迟（1-2秒）
       await new Promise((resolve) => setTimeout(resolve, 1500));
 
-      // 使用 mock 数据（随机选择一个结果）
-      const randomResult = MOCK_DETECTION_RESULTS[
-        Math.floor(Math.random() * MOCK_DETECTION_RESULTS.length)
-      ];
-      
-      setResult({
-        ...randomResult,
-        heatmapUrl: previewUrl, // 使用上传的图片作为热力图
-      });
-      message.success("检测完成！");
+      // 根据不同的输入源返回不同的 hardcode 结果
+      // 使用第一个选中的模型作为主要模型
+      const primaryModel = selectedModels[0];
+      let detectionResult;
+
+      if (activeTab === "upload" && previewUrl.startsWith("blob:")) {
+        // 本地上传的图片：硬编码为真实内容
+        detectionResult = {
+          isFake: false,
+          confidence: 0.12,
+          model: primaryModel,
+          details: {
+            artifacts: [],
+          },
+          heatmapUrl: previewUrl,
+        };
+      } else if (activeTab === "url" && urlInput) {
+        // URL解析的图片：硬编码为虚假内容
+        detectionResult = {
+          isFake: true,
+          confidence: 0.89,
+          model: primaryModel,
+          details: {
+            faceRegion: { x: 20, y: 15, width: 60, height: 70 },
+            artifacts: ["AI生成特征明显", "面部细节不自然", "光照与阴影不一致", "皮肤纹理过于完美"],
+          },
+          heatmapUrl: previewUrl,
+        };
+      } else {
+        // 默认情况
+        detectionResult = {
+          isFake: false,
+          confidence: 0.08,
+          model: primaryModel,
+          details: {
+            artifacts: [],
+          },
+          heatmapUrl: previewUrl,
+        };
+      }
+
+      setResult(detectionResult);
+      setCurrentStep(3); // 进入结果展示步骤
+      message.success(`使用 ${selectedModels.join(", ")} 检测完成！`);
 
       // 滚动到结果区域
       setTimeout(() => {
@@ -194,6 +208,8 @@ const FakeDetectPage = () => {
     setUploadedFile(null);
     setPreviewUrl("");
     setUrlInput("");
+    setCurrentStep(1);
+    setSelectedModels(["XceptionNet"]); // 重置为默认选项
   };
 
   const handleDownloadReport = () => {
@@ -213,17 +229,25 @@ const FakeDetectPage = () => {
 伪造概率：${Math.round(result.confidence * 100)}%
 检测模型：${result.model}
 
-${result.details.artifacts && result.details.artifacts.length > 0 ? `
+${
+  result.details.artifacts && result.details.artifacts.length > 0
+    ? `
 异常特征
 --------
 ${result.details.artifacts.map((artifact, index) => `${index + 1}. ${artifact}`).join("\n")}
-` : ""}
+`
+    : ""
+}
 
-${result.details.faceRegion ? `
+${
+  result.details.faceRegion
+    ? `
 可疑区域
 --------
 已检测到可疑的人脸区域，建议进一步核实。
-` : ""}
+`
+    : ""
+}
 
 ---
 此报告由 AIGC 安全性研究与工具平台自动生成
@@ -239,7 +263,7 @@ ${result.details.faceRegion ? `
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
-    
+
     message.success("检测报告已下载！");
   };
 
@@ -250,8 +274,8 @@ ${result.details.faceRegion ? `
           虚假内容检测
         </Title>
         <Paragraph className="page-description">
-          使用深度学习技术检测图片或视频是否经过 AI 生成或篡改。 支持识别
-          Deepfake、FaceSwap 等多种伪造手段，提供可疑区域定位和详细分析报告。
+          使用深度学习技术检测图片或视频是否经过 AI 生成或篡改。 支持识别 Deepfake、FaceSwap
+          等多种伪造手段，提供可疑区域定位和详细分析报告。
         </Paragraph>
       </div>
 
@@ -271,7 +295,7 @@ ${result.details.faceRegion ? `
               onChange={setActiveTab}
               items={[
                 {
-                  key: 'upload',
+                  key: "upload",
                   label: (
                     <span>
                       <UploadOutlined /> 本地上传
@@ -287,13 +311,11 @@ ${result.details.faceRegion ? `
                           <p className="ant-upload-text" style={{ fontSize: 18 }}>
                             点击或拖拽文件到此区域上传
                           </p>
-                          <p className="ant-upload-hint">
-                            支持图片（JPG、PNG）或视频（MP4、AVI）格式
-                          </p>
+                          <p className="ant-upload-hint">支持图片（JPG、PNG）或视频（MP4、AVI）格式</p>
                         </Dragger>
                       )}
 
-                      {uploadedFile && previewUrl && activeTab === 'upload' && (
+                      {uploadedFile && previewUrl && activeTab === "upload" && (
                         <div className="heatmap-overlay">
                           <Image
                             src={previewUrl}
@@ -307,12 +329,8 @@ ${result.details.faceRegion ? `
                               style={{
                                 top: `${(result.details.faceRegion.y / 100) * 100}%`,
                                 left: `${(result.details.faceRegion.x / 100) * 100}%`,
-                                width: `${
-                                  (result.details.faceRegion.width / 100) * 100
-                                }%`,
-                                height: `${
-                                  (result.details.faceRegion.height / 100) * 100
-                                }%`,
+                                width: `${(result.details.faceRegion.width / 100) * 100}%`,
+                                height: `${(result.details.faceRegion.height / 100) * 100}%`,
                               }}
                             />
                           )}
@@ -322,7 +340,7 @@ ${result.details.faceRegion ? `
                   ),
                 },
                 {
-                  key: 'url',
+                  key: "url",
                   label: (
                     <span>
                       <LinkOutlined /> URL解析
@@ -330,17 +348,17 @@ ${result.details.faceRegion ? `
                   ),
                   children: (
                     <>
-                      <Space.Compact style={{ width: '100%', marginBottom: 16 }}>
+                      <Space.Compact style={{ width: "100%", marginBottom: 16 }}>
                         <Input
                           size="large"
-                          placeholder="请输入图片或视频的URL地址，例如：https://example.com/image.jpg"
+                          placeholder="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=768"
                           value={urlInput}
                           onChange={(e) => setUrlInput(e.target.value)}
                           onPressEnter={handleUrlLoad}
                           disabled={loading}
                         />
-                        <Button 
-                          type="primary" 
+                        <Button
+                          type="primary"
                           size="large"
                           onClick={handleUrlLoad}
                           loading={loading}
@@ -350,7 +368,7 @@ ${result.details.faceRegion ? `
                         </Button>
                       </Space.Compact>
 
-                      {uploadedFile && previewUrl && activeTab === 'url' && (
+                      {uploadedFile && previewUrl && activeTab === "url" && (
                         <div className="heatmap-overlay">
                           <Image
                             src={previewUrl}
@@ -364,12 +382,8 @@ ${result.details.faceRegion ? `
                               style={{
                                 top: `${(result.details.faceRegion.y / 100) * 100}%`,
                                 left: `${(result.details.faceRegion.x / 100) * 100}%`,
-                                width: `${
-                                  (result.details.faceRegion.width / 100) * 100
-                                }%`,
-                                height: `${
-                                  (result.details.faceRegion.height / 100) * 100
-                                }%`,
+                                width: `${(result.details.faceRegion.width / 100) * 100}%`,
+                                height: `${(result.details.faceRegion.height / 100) * 100}%`,
                               }}
                             />
                           )}
@@ -381,27 +395,64 @@ ${result.details.faceRegion ? `
               ]}
             />
 
-            <Space
-              direction="vertical"
-              style={{ width: "100%", marginTop: 16 }}
-            >
-              <Button
-                type="primary"
-                size="large"
-                block
-                icon={<ScanOutlined />}
-                onClick={handleDetect}
-                loading={loading}
-                disabled={!uploadedFile || loading}
-              >
-                {loading ? "检测中..." : result ? "重新检测" : "开始检测"}
-              </Button>
-              <Button
-                block
-                icon={<UploadOutlined />}
-                onClick={resetDetection}
-                disabled={!uploadedFile || loading}
-              >
+            {/* 检测方法选择 - 仅在第2步（已上传文件但未检测）时显示 */}
+            {currentStep === 2 && uploadedFile && !result && (
+              <Card title="选择检测方法" size="small" style={{ marginTop: 16, backgroundColor: "#f5f5f5" }}>
+                <Paragraph style={{ marginBottom: 12, fontSize: 13, color: "#666" }}>
+                  选择一个或多个检测模型进行综合分析，提高检测准确率
+                </Paragraph>
+                <Checkbox.Group
+                  value={selectedModels}
+                  onChange={(checkedValues) => setSelectedModels(checkedValues as string[])}
+                  style={{ width: "100%" }}
+                >
+                  <Space direction="vertical" style={{ width: "100%" }}>
+                    {DETECTION_MODELS.map((model) => (
+                      <Card key={model.value} size="small" hoverable>
+                        <Checkbox value={model.value} style={{ width: "100%" }}>
+                          <div>
+                            <Text strong>{model.label}</Text>
+                            <br />
+                            <Text type="secondary" style={{ fontSize: 12 }}>
+                              {model.description}
+                            </Text>
+                          </div>
+                        </Checkbox>
+                      </Card>
+                    ))}
+                  </Space>
+                </Checkbox.Group>
+              </Card>
+            )}
+
+            <Space direction="vertical" style={{ width: "100%", marginTop: 16 }}>
+              {currentStep === 2 && !result && (
+                <Button
+                  type="primary"
+                  size="large"
+                  block
+                  icon={<ScanOutlined />}
+                  onClick={handleDetect}
+                  loading={loading}
+                  disabled={!uploadedFile || loading || selectedModels.length === 0}
+                >
+                  {loading ? "检测中..." : `使用 ${selectedModels.length} 个模型开始检测`}
+                </Button>
+              )}
+              {currentStep === 3 && result && (
+                <Button
+                  type="primary"
+                  size="large"
+                  block
+                  icon={<ScanOutlined />}
+                  onClick={handleDetect}
+                  loading={loading}
+                  disabled={loading}
+                >
+                  重新检测
+                </Button>
+              )}
+              <Button block icon={<UploadOutlined />} onClick={resetDetection} disabled={loading}>
                 重新上传
               </Button>
             </Space>
@@ -419,12 +470,8 @@ ${result.details.faceRegion ? `
                   borderRadius: 8,
                 }}
               >
-                <ScanOutlined
-                  style={{ fontSize: 64, color: "#d9d9d9", marginBottom: 16 }}
-                />
-                <Paragraph style={{ color: "#999", marginBottom: 8 }}>
-                  等待上传文件
-                </Paragraph>
+                <ScanOutlined style={{ fontSize: 64, color: "#d9d9d9", marginBottom: 16 }} />
+                <Paragraph style={{ color: "#999", marginBottom: 8 }}>等待上传文件</Paragraph>
                 <Text type="secondary" style={{ fontSize: 12 }}>
                   上传后将显示检测结果
                 </Text>
@@ -441,25 +488,17 @@ ${result.details.faceRegion ? `
                 }}
               >
                 <Spin size="large" />
-                <Paragraph style={{ marginTop: 16, color: "#666" }}>
-                  检测中...
-                </Paragraph>
+                <Paragraph style={{ marginTop: 16, color: "#666" }}>检测中...</Paragraph>
               </div>
             )}
 
             {result && !loading && (
               <div>
-                <Space
-                  direction="vertical"
-                  size="large"
-                  style={{ width: "100%" }}
-                >
+                <Space direction="vertical" size="large" style={{ width: "100%" }}>
                   <div style={{ textAlign: "center", padding: "20px 0" }}>
                     {result.isFake ? (
                       <>
-                        <CloseCircleOutlined
-                          style={{ fontSize: 72, color: "#ff4d4f" }}
-                        />
+                        <CloseCircleOutlined style={{ fontSize: 72, color: "#ff4d4f" }} />
                         <Title
                           level={3}
                           style={{
@@ -473,9 +512,7 @@ ${result.details.faceRegion ? `
                       </>
                     ) : (
                       <>
-                        <CheckCircleOutlined
-                          style={{ fontSize: 72, color: "#52c41a" }}
-                        />
+                        <CheckCircleOutlined style={{ fontSize: 72, color: "#52c41a" }} />
                         <Title
                           level={3}
                           style={{
@@ -511,23 +548,18 @@ ${result.details.faceRegion ? `
                     </Tag>
                   </div>
 
-                  {result.details.artifacts &&
-                    result.details.artifacts.length > 0 && (
-                      <div>
-                        <Text strong>检测到的异常特征：</Text>
-                        <div style={{ marginTop: 8 }}>
-                          {result.details.artifacts.map((artifact, index) => (
-                            <Tag
-                              color="red"
-                              key={index}
-                              style={{ marginBottom: 8 }}
-                            >
-                              {artifact}
-                            </Tag>
-                          ))}
-                        </div>
+                  {result.details.artifacts && result.details.artifacts.length > 0 && (
+                    <div>
+                      <Text strong>检测到的异常特征：</Text>
+                      <div style={{ marginTop: 8 }}>
+                        {result.details.artifacts.map((artifact, index) => (
+                          <Tag color="red" key={index} style={{ marginBottom: 8 }}>
+                            {artifact}
+                          </Tag>
+                        ))}
                       </div>
-                    )}
+                    </div>
+                  )}
 
                   {result.details.faceRegion && (
                     <Alert
@@ -539,12 +571,7 @@ ${result.details.faceRegion ? `
                   )}
 
                   <Space style={{ width: "100%" }} direction="vertical">
-                    <Button 
-                      type="primary" 
-                      block 
-                      icon={<DownloadOutlined />}
-                      onClick={handleDownloadReport}
-                    >
+                    <Button type="primary" block icon={<DownloadOutlined />} onClick={handleDownloadReport}>
                       下载检测报告
                     </Button>
                   </Space>

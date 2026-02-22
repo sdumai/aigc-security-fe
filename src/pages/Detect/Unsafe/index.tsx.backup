@@ -106,8 +106,7 @@ const UnsafeDetectPage = () => {
       // 创建预览 URL
       const url = URL.createObjectURL(uploadFile);
       setPreviewUrl(url);
-      setCurrentStep(2); // 上传成功后进入选择检测方法步骤
-      message.success("文件上传成功，请选择检测方法");
+      message.success("文件上传成功，请点击开始检测");
     } catch (error) {
       console.error("Upload error:", error);
       message.error("上传失败，请重试");
@@ -139,8 +138,7 @@ const UnsafeDetectPage = () => {
         status: "done",
         url: urlInput,
       } as UploadFile);
-      setCurrentStep(2); // URL加载成功后进入选择检测方法步骤
-      message.success("URL加载成功，请选择检测方法");
+      message.success("URL加载成功，请点击开始检测");
     } catch (error) {
       console.error("URL load error:", error);
       message.error("URL加载失败，请检查地址是否正确");
@@ -152,11 +150,6 @@ const UnsafeDetectPage = () => {
   const handleDetect = async () => {
     if (!uploadedFile) {
       message.warning("请先上传文件");
-      return;
-    }
-
-    if (selectedModels.length === 0) {
-      message.warning("请至少选择一个检测模型");
       return;
     }
 
@@ -213,8 +206,7 @@ const UnsafeDetectPage = () => {
       }
 
       setResult(detectionResult);
-      setCurrentStep(3); // 进入结果展示步骤
-      message.success(`使用 ${selectedModels.join(", ")} 检测完成！`);
+      message.success("检测完成！");
 
       // 滚动到结果区域
       setTimeout(() => {
@@ -244,8 +236,6 @@ const UnsafeDetectPage = () => {
     setUploadedFile(null);
     setPreviewUrl("");
     setUrlInput("");
-    setCurrentStep(1);
-    setSelectedModels(["Google-SafeSearch"]); // 重置为默认选项
   };
 
   const handleDownloadReport = () => {
@@ -412,64 +402,19 @@ ${result.suggestions.map((s, i) => `${i + 1}. ${s}`).join("\n")}
               ]}
             />
 
-            {/* 检测方法选择 - 仅在第2步（已上传文件但未检测）时显示 */}
-            {currentStep === 2 && uploadedFile && !result && (
-              <Card title="选择检测方法" size="small" style={{ marginTop: 16, backgroundColor: "#f5f5f5" }}>
-                <Paragraph style={{ marginBottom: 12, fontSize: 13, color: "#666" }}>
-                  选择一个或多个检测模型进行综合分析，提高检测准确率
-                </Paragraph>
-                <Checkbox.Group
-                  value={selectedModels}
-                  onChange={(checkedValues) => setSelectedModels(checkedValues as string[])}
-                  style={{ width: "100%" }}
-                >
-                  <Space direction="vertical" style={{ width: "100%" }}>
-                    {SAFETY_DETECTION_MODELS.map((model) => (
-                      <Card key={model.value} size="small" hoverable>
-                        <Checkbox value={model.value} style={{ width: "100%" }}>
-                          <div>
-                            <Text strong>{model.label}</Text>
-                            <br />
-                            <Text type="secondary" style={{ fontSize: 12 }}>
-                              {model.description}
-                            </Text>
-                          </div>
-                        </Checkbox>
-                      </Card>
-                    ))}
-                  </Space>
-                </Checkbox.Group>
-              </Card>
-            )}
-
             <Space direction="vertical" style={{ width: "100%", marginTop: 16 }}>
-              {currentStep === 2 && !result && (
-                <Button
-                  type="primary"
-                  size="large"
-                  block
-                  icon={<SafetyOutlined />}
-                  onClick={handleDetect}
-                  loading={loading}
-                  disabled={!uploadedFile || loading || selectedModels.length === 0}
-                >
-                  {loading ? "检测中..." : `使用 ${selectedModels.length} 个模型开始检测`}
-                </Button>
-              )}
-              {currentStep === 3 && result && (
-                <Button
-                  type="primary"
-                  size="large"
-                  block
-                  icon={<SafetyOutlined />}
-                  onClick={handleDetect}
-                  loading={loading}
-                  disabled={loading}
-                >
-                  重新检测
-                </Button>
-              )}
-              <Button block icon={<UploadOutlined />} onClick={resetDetection} disabled={loading}>
+              <Button
+                type="primary"
+                size="large"
+                block
+                icon={<SafetyOutlined />}
+                onClick={handleDetect}
+                loading={loading}
+                disabled={!uploadedFile || loading}
+              >
+                {loading ? "检测中..." : result ? "重新检测" : "开始检测"}
+              </Button>
+              <Button block icon={<UploadOutlined />} onClick={resetDetection} disabled={!uploadedFile || loading}>
                 重新上传
               </Button>
             </Space>

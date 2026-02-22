@@ -1,0 +1,170 @@
+#!/usr/bin/expect -f
+
+# AIGC 安全平台 - 自动化部署脚本（使用 expect）
+# 使用方法: chmod +x deploy-auto.exp && ./deploy-auto.exp
+
+set timeout 300
+set remote_host "10.102.32.144"
+set remote_user "lab426"
+set remote_pass "426"
+set remote_dir "aigc-security-platform"
+set remote_port "5670"
+
+puts "\n🚀 AIGC 安全平台 - 自动化部署"
+puts "================================\n"
+
+# 步骤 1: 创建远程目录
+puts "📁 步骤 1/4: 创建远程目录..."
+spawn ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ${remote_user}@${remote_host} "mkdir -p ~/${remote_dir}"
+expect {
+    "password:" {
+        send "${remote_pass}\r"
+        expect {
+            eof {
+                puts "✅ 远程目录创建成功\n"
+            }
+            timeout {
+                puts "❌ 创建目录超时"
+                exit 1
+            }
+        }
+    }
+    "Permission denied" {
+        puts "❌ 权限被拒绝，请检查密码"
+        exit 1
+    }
+    timeout {
+        puts "❌ 连接超时"
+        exit 1
+    }
+}
+
+# 步骤 2: 打包本地文件
+puts "📦 步骤 2/4: 打包本地文件..."
+set pack_result [exec bash -c "cd dist && tar czf ../dist.tar.gz . 2>&1"]
+puts "✅ 文件打包完成\n"
+
+# 步骤 3: 上传压缩包
+puts "📤 步骤 3/4: 上传文件到服务器（这可能需要几分钟）..."
+spawn scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null dist.tar.gz ${remote_user}@${remote_host}:~/
+expect {
+    "password:" {
+        send "${remote_pass}\r"
+        expect {
+            "100%" {
+                puts "✅ 文件上传完成\n"
+                expect eof
+            }
+            timeout {
+                puts "❌ 上传超时"
+                exit 1
+            }
+        }
+    }
+    timeout {
+        puts "❌ 连接超时"
+        exit 1
+    }
+}
+
+# 步骤 4: 解压并启动服务
+puts "🚀 步骤 4/4: 解压文件并启动服务..."
+spawn ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ${remote_user}@${remote_host}
+expect {
+    "password:" {
+        send "${remote_pass}\r"
+    }
+    timeout {
+        puts "❌ 连接超时"
+        exit 1
+    }
+}
+
+# 等待登录成功
+expect {
+    -re "\[#$\] $" {
+        # 成功登录
+    }
+    timeout {
+        puts "❌ 登录超时"
+        exit 1
+    }
+}
+
+# 解压文件
+send "cd ~/${remote_dir}\r"
+expect -re "\[#$\] $"
+
+send "tar xzf ~/dist.tar.gz\r"
+expect -re "\[#$\] $"
+
+send "rm ~/dist.tar.gz\r"
+expect -re "\[#$\] $"
+
+puts "✅ 文件解压完成"
+
+# 检查 http-server
+send "which http-server\r"
+expect {
+    "http-server" {
+        puts "✅ http-server 已安装"
+        expect -re "\[#$\] $"
+    }
+    -re "\[#$\] $" {
+        puts "⚙️  正在安装 http-server..."
+        send "npm install -g http-server\r"
+        expect {
+            -re "\[#$\] $" {
+                puts "✅ http-server 安装完成"
+            }
+            timeout {
+                puts "⚠️  http-server 安装超时，但继续..."
+            }
+        }
+    }
+}
+
+# 停止旧服务
+send "tmux kill-session -t aigc-security 2>/dev/null || true\r"
+expect -re "\[#$\] $"
+puts "✅ 已停止旧服务"
+
+# 启动新服务
+send "tmux new-session -d -s aigc-security 'http-server . -p ${remote_port} -a 0.0.0.0'\r"
+expect -re "\[#$\] $"
+puts "✅ 新服务已启动"
+
+# 等待一下服务启动
+send "sleep 2\r"
+expect -re "\[#$\] $"
+
+# 验证服务状态
+send "tmux ls | grep aigc-security\r"
+expect {
+    "aigc-security" {
+        puts "✅ 服务运行正常"
+        expect -re "\[#$\] $"
+    }
+    -re "\[#$\] $" {
+        puts "⚠️  无法确认服务状态"
+    }
+}
+
+# 退出 SSH
+send "exit\r"
+expect eof
+
+# 清理本地临时文件
+exec rm -f dist.tar.gz
+
+puts "\n================================"
+puts "✅ 部署成功！\n"
+puts "🌐 访问地址: http://${remote_host}:${remote_port}\n"
+puts "📋 管理命令："
+puts "   查看服务: ssh ${remote_user}@${remote_host} 'tmux attach -t aigc-security'"
+puts "   停止服务: ssh ${remote_user}@${remote_host} 'tmux kill-session -t aigc-security'"
+puts "\n================================\n"
+
+exit 0
+
+

@@ -11,24 +11,48 @@ export const handlers = [
     });
   }),
 
-  // 通用图像生成
-  http.post("/api/generate/image", async () => {
+  // 通用图像生成（可在此对接第三方文生图 API，或由真实后端代理）
+  http.post("/api/generate/image", async ({ request }) => {
     await delay(1200);
+    const body = (await request.json()) as { prompt?: string; size?: string };
+    // 开发环境返回占位图；生产环境应由后端调用第三方 API 后返回真实 imageUrl
+    const size = body?.size?.replace("x", "/") || "768/768";
     return HttpResponse.json({
       success: true,
-      imageUrl: "https://picsum.photos/768/768",
+      imageUrl: `https://picsum.photos/seed/${encodeURIComponent(body?.prompt || "default")}/${size}`,
       message: "图像生成成功",
     });
   }),
 
   // 视频生成
-  http.post("/api/generate/video", async () => {
-    await delay(2000);
-    return HttpResponse.json({
-      success: true,
-      videoUrl: "/mock/generated_video.mp4",
-      message: "视频生成成功",
-    });
+  http.post("/api/generate/video", async ({ request }) => {
+    await delay(3000); // 视频生成需要更长时间
+
+    try {
+      const body = (await request.json()) as any;
+      const prompt = body?.prompt || "";
+
+      // 根据提示词返回不同的视频或使用默认视频
+      // 这里可以集成真实的视频生成 API
+      return HttpResponse.json({
+        success: true,
+        videoUrl: "/mock/sample_video.mp4",
+        message: `视频生成成功！提示词：${prompt.substring(0, 20)}...`,
+        details: {
+          duration: body?.duration || "2",
+          resolution: "720p",
+          fps: 24,
+        },
+      });
+    } catch (error) {
+      return HttpResponse.json(
+        {
+          success: false,
+          message: "视频生成失败，请重试",
+        },
+        { status: 500 },
+      );
+    }
   }),
 
   // 虚假内容检测
@@ -55,11 +79,7 @@ export const handlers = [
       violations: ["violence", "sensitive"],
       risk: "high",
       riskScore: 0.85,
-      suggestions: [
-        "建议模糊处理人物面部",
-        "移除暴力相关元素",
-        "添加内容警告标识",
-      ],
+      suggestions: ["建议模糊处理人物面部", "移除暴力相关元素", "添加内容警告标识"],
       details: {
         violence: {
           score: 0.92,
@@ -117,8 +137,7 @@ export const handlers = [
           type: "video",
           title: "AI 视频生成 - 未来城市",
           thumbnailUrl: "https://picsum.photos/200/200?random=2",
-          fullUrl:
-            "https://sample-videos.com/video123/mp4/720/big_buck_bunny_720p_1mb.mp4",
+          fullUrl: "https://sample-videos.com/video123/mp4/720/big_buck_bunny_720p_1mb.mp4",
           createdAt: "2024-12-06 13:20:15",
           size: "15.7 MB",
         },
@@ -145,8 +164,7 @@ export const handlers = [
           type: "video",
           title: "Deepfake 视频合成 - 演讲场景",
           thumbnailUrl: "https://picsum.photos/200/200?random=5",
-          fullUrl:
-            "https://sample-videos.com/video123/mp4/720/big_buck_bunny_720p_1mb.mp4",
+          fullUrl: "https://sample-videos.com/video123/mp4/720/big_buck_bunny_720p_1mb.mp4",
           createdAt: "2024-12-05 16:45:20",
           size: "24.5 MB",
         },
@@ -182,8 +200,7 @@ export const handlers = [
           type: "video",
           title: "AI 视频 - 自然风光",
           thumbnailUrl: "https://picsum.photos/200/200?random=9",
-          fullUrl:
-            "https://sample-videos.com/video123/mp4/720/big_buck_bunny_720p_1mb.mp4",
+          fullUrl: "https://sample-videos.com/video123/mp4/720/big_buck_bunny_720p_1mb.mp4",
           createdAt: "2024-12-04 14:55:40",
           size: "18.3 MB",
         },

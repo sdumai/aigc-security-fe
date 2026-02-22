@@ -22,18 +22,20 @@ import request from "@/utils/request";
 
 const { Title, Paragraph } = Typography;
 
-// Mock Deepfake 生成结果图片
-const MOCK_DEEPFAKE_RESULTS = [
-  "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=512&h=512&fit=crop",
-  "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=512&h=512&fit=crop",
-  "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=512&h=512&fit=crop",
-  "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=512&h=512&fit=crop",
-  "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=512&h=512&fit=crop",
-  "https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=512&h=512&fit=crop",
-];
-
 type FunctionType = "faceswap" | "fomm" | "stargan";
-type ModelType = "FaceShifter" | "SimSwap" | "FOMM" | "StarGAN";
+type ModelType =
+  | "FaceShifter"
+  | "SimSwap"
+  | "DeepFaceLab"
+  | "FaceSwap-GAN"
+  | "FOMM"
+  | "Face2Face"
+  | "Wav2Lip"
+  | "LivePortrait"
+  | "StarGAN"
+  | "StarGAN-v2"
+  | "AttGAN"
+  | "STGAN";
 
 interface GenerateResult {
   imageUrl: string;
@@ -50,9 +52,9 @@ const DeepfakeGeneratePage = () => {
   const [functionType, setFunctionType] = useState<FunctionType>("faceswap");
 
   const modelOptions: Record<FunctionType, ModelType[]> = {
-    faceswap: ["FaceShifter", "SimSwap"],
-    fomm: ["FOMM"],
-    stargan: ["StarGAN"],
+    faceswap: ["FaceShifter", "SimSwap", "DeepFaceLab", "FaceSwap-GAN"],
+    fomm: ["FOMM", "Face2Face", "Wav2Lip", "LivePortrait"],
+    stargan: ["StarGAN", "StarGAN-v2", "AttGAN", "STGAN"],
   };
 
   const handleGenerate = async () => {
@@ -73,18 +75,18 @@ const DeepfakeGeneratePage = () => {
       setResult(null);
 
       const values = form.getFieldsValue();
-      
+
       // 模拟生成延迟（2-3秒）
       await new Promise((resolve) => setTimeout(resolve, 2500));
 
-      // 使用 mock 数据
-      const randomResult = MOCK_DEEPFAKE_RESULTS[Math.floor(Math.random() * MOCK_DEEPFAKE_RESULTS.length)];
-      const functionName = 
-        values.function === "faceswap" ? "人脸替换" :
-        values.function === "fomm" ? "人脸动画" : "属性编辑";
-      
+      // 所有功能都使用硬编码的图片
+      const resultImage = "/mock/faceswap_hardcoded.png";
+
+      const functionName =
+        values.function === "faceswap" ? "人脸替换" : values.function === "fomm" ? "人脸动画" : "属性编辑";
+
       setResult({
-        imageUrl: randomResult,
+        imageUrl: resultImage,
         message: `使用 ${values.model} 模型完成${functionName}，效果逼真自然！`,
       });
       message.success("生成成功！");
@@ -100,17 +102,15 @@ const DeepfakeGeneratePage = () => {
     if (!result?.imageUrl) return;
 
     const values = form.getFieldsValue();
-    const functionName = 
-      values.function === "faceswap" ? "faceswap" :
-      values.function === "fomm" ? "fomm" : "stargan";
+    const functionName = values.function === "faceswap" ? "faceswap" : values.function === "fomm" ? "fomm" : "stargan";
 
     try {
       message.loading("正在下载...", 0);
-      
+
       // 使用 fetch 获取图片数据，避免跨域问题
       const response = await fetch(result.imageUrl);
       const blob = await response.blob();
-      
+
       // 创建 blob URL 并下载
       const blobUrl = URL.createObjectURL(blob);
       const link = document.createElement("a");
@@ -119,10 +119,10 @@ const DeepfakeGeneratePage = () => {
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      
+
       // 清理 blob URL
       URL.revokeObjectURL(blobUrl);
-      
+
       message.destroy();
       message.success("下载成功！");
     } catch (error) {
@@ -140,11 +140,7 @@ const DeepfakeGeneratePage = () => {
       await request.post("/data/save", {
         type: "image",
         title: `Deepfake ${
-          values.function === "faceswap"
-            ? "人脸替换"
-            : values.function === "fomm"
-            ? "人脸动画"
-            : "属性编辑"
+          values.function === "faceswap" ? "人脸替换" : values.function === "fomm" ? "人脸动画" : "属性编辑"
         }`,
         url: result?.imageUrl,
         model: values.model,
@@ -193,17 +189,25 @@ const DeepfakeGeneratePage = () => {
                 model: "FaceShifter",
               }}
             >
-              <Form.Item
-                label="上传目标人脸图片"
-                name="target"
-                tooltip="将被替换或编辑的目标人脸"
-              >
+              <Form.Item label="上传目标人脸图片" name="target" tooltip="将被替换或编辑的目标人脸">
                 <Upload
                   listType="picture-card"
                   fileList={targetFile}
                   maxCount={1}
                   beforeUpload={(file) => {
-                    setTargetFile([file as any]);
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                      setTargetFile([
+                        {
+                          uid: file.uid,
+                          name: file.name,
+                          status: "done",
+                          url: e.target?.result as string,
+                          originFileObj: file,
+                        } as any,
+                      ]);
+                    };
+                    reader.readAsDataURL(file);
                     return false;
                   }}
                   onRemove={() => setTargetFile([])}
@@ -217,17 +221,25 @@ const DeepfakeGeneratePage = () => {
                 </Upload>
               </Form.Item>
 
-              <Form.Item
-                label="上传驱动人脸/视频"
-                name="source"
-                tooltip="用于替换的源人脸或驱动视频"
-              >
+              <Form.Item label="上传驱动人脸/视频" name="source" tooltip="用于替换的源人脸或驱动视频">
                 <Upload
                   listType="picture-card"
                   fileList={sourceFile}
                   maxCount={1}
                   beforeUpload={(file) => {
-                    setSourceFile([file as any]);
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                      setSourceFile([
+                        {
+                          uid: file.uid,
+                          name: file.name,
+                          status: "done",
+                          url: e.target?.result as string,
+                          originFileObj: file,
+                        } as any,
+                      ]);
+                    };
+                    reader.readAsDataURL(file);
                     return false;
                   }}
                   onRemove={() => setSourceFile([])}
@@ -241,11 +253,7 @@ const DeepfakeGeneratePage = () => {
                 </Upload>
               </Form.Item>
 
-              <Form.Item
-                label="功能选择"
-                name="function"
-                rules={[{ required: true, message: "请选择功能" }]}
-              >
+              <Form.Item label="功能选择" name="function" rules={[{ required: true, message: "请选择功能" }]}>
                 <Radio.Group
                   onChange={(e) => {
                     const newType = e.target.value as FunctionType;
@@ -256,18 +264,14 @@ const DeepfakeGeneratePage = () => {
                   }}
                 >
                   <Space direction="vertical">
-                    <Radio value="faceswap">人脸替换（FaceSwap）</Radio>
-                    <Radio value="fomm">人脸动画（FOMM）</Radio>
-                    <Radio value="stargan">属性编辑（StarGAN）</Radio>
+                    <Radio value="faceswap">人脸替换（Face Swapping）</Radio>
+                    <Radio value="fomm">人脸动画（Face Reenactment）</Radio>
+                    <Radio value="stargan">属性编辑（Attribute Editing）</Radio>
                   </Space>
                 </Radio.Group>
               </Form.Item>
 
-              <Form.Item
-                label="模型选择"
-                name="model"
-                rules={[{ required: true, message: "请选择模型" }]}
-              >
+              <Form.Item label="模型选择" name="model" rules={[{ required: true, message: "请选择模型" }]}>
                 <Select>
                   {modelOptions[functionType].map((model) => (
                     <Select.Option key={model} value={model}>
@@ -298,9 +302,7 @@ const DeepfakeGeneratePage = () => {
             {loading ? (
               <div style={{ textAlign: "center", padding: "80px 0" }}>
                 <Spin size="large" />
-                <Paragraph style={{ marginTop: 16, color: "#666" }}>
-                  正在生成中，请稍候...
-                </Paragraph>
+                <Paragraph style={{ marginTop: 16, color: "#666" }}>正在生成中，请稍候...</Paragraph>
               </div>
             ) : result ? (
               <div>
@@ -317,16 +319,8 @@ const DeepfakeGeneratePage = () => {
                   showIcon
                   style={{ marginTop: 16 }}
                 />
-                <Space
-                  style={{ marginTop: 16, width: "100%" }}
-                  direction="vertical"
-                >
-                  <Button 
-                    type="primary" 
-                    block 
-                    icon={<DownloadOutlined />}
-                    onClick={handleDownload}
-                  >
+                <Space style={{ marginTop: 16, width: "100%" }} direction="vertical">
+                  <Button type="primary" block icon={<DownloadOutlined />} onClick={handleDownload}>
                     下载到本地
                   </Button>
                   <Button block onClick={handleSave}>
@@ -346,12 +340,8 @@ const DeepfakeGeneratePage = () => {
                   borderRadius: 8,
                 }}
               >
-                <Paragraph style={{ color: "#999" }}>
-                  请配置参数并点击"开始生成"按钮
-                </Paragraph>
-                <Paragraph style={{ color: "#999", fontSize: 12 }}>
-                  生成结果将在此处显示
-                </Paragraph>
+                <Paragraph style={{ color: "#999" }}>请配置参数并点击"开始生成"按钮</Paragraph>
+                <Paragraph style={{ color: "#999", fontSize: 12 }}>生成结果将在此处显示</Paragraph>
               </div>
             )}
           </Card>
