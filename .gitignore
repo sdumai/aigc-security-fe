@@ -27,3 +27,6 @@ dist-ssr
 *.sw?
 .cursor
 
+# 视频检测本地上传临时文件
+server/uploads
+
