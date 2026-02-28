@@ -1,5 +1,7 @@
 /**
  * 腾讯云图片/视频内容安全代理：解决浏览器 CORS，密钥仅存服务端
+ * 火山方舟：VOLC_ARK_API_KEY、VOLC_ARK_VISION_MODEL（敏感检测）
+ * 火山人像融合（人脸替换）：VOLC_ACCESS_KEY、VOLC_SECRET_KEY（视觉开放平台 AK/SK，见控制台）
  * 启动：在项目根目录执行 node server/index.cjs
  * 环境变量：.env.local 中的 TENCENT_SECRET_ID、TENCENT_SECRET_KEY、TENCENT_IMS_BIZTYPE（可选）
  * 视频本地上传：二选一
@@ -25,6 +27,8 @@ const VOLC_ARK_VISION_MODEL = (
   process.env.VITE_VOLC_ARK_VISION_MODEL ||
   ""
 ).trim();
+const VOLC_ACCESS_KEY = (process.env.VOLC_ACCESS_KEY || process.env.VITE_VOLC_ACCESS_KEY || "").trim();
+const VOLC_SECRET_KEY = (process.env.VOLC_SECRET_KEY || process.env.VITE_VOLC_SECRET_KEY || "").trim();
 
 const app = express();
 app.use(cors());
@@ -359,6 +363,241 @@ app.post("/api/detect/tencent-video-ims", async (req, res) => {
   }
 });
 
+/** 火山引擎人像融合（人脸替换）FaceSwap API
+ * @see https://www.volcengine.com/docs/86081/1660449 人像融合3.6
+ * @see https://www.volcengine.com/docs/6271/65541 接口文档：Action=FaceSwap, image_base64, template_base64
+ * 鉴权：VOLC_ACCESS_KEY + VOLC_SECRET_KEY，使用 HMAC-SHA256 签名
+ */
+const VOLC_CV_HOST = "open.volcengineapi.com";
+const VOLC_CV_SERVICE = "cv";
+const VOLC_CV_REGION = "cn-north-1";
+
+function volcGetXDate() {
+  return new Date().toISOString().replace(/[:-]|\.\d{3}/g, "");
+}
+
+function volcHmac(secret, s) {
+  return require("crypto").createHmac("sha256", secret).update(s, "utf8").digest();
+}
+
+function volcHash(s) {
+  return require("crypto").createHash("sha256").update(s, "utf8").digest("hex");
+}
+
+function volcUriEscape(str) {
+  try {
+    return encodeURIComponent(String(str))
+      .replace(/[^A-Za-z0-9_.~\-%]+/g, encodeURIComponent)
+      .replace(/[*]/g, (ch) => `%${ch.charCodeAt(0).toString(16).toUpperCase()}`);
+  } catch (e) {
+    return "";
+  }
+}
+
+function volcQueryToString(params) {
+  return Object.keys(params)
+    .sort()
+    .map((key) => {
+      const val = params[key];
+      if (val === undefined || val === null) return undefined;
+      const k = volcUriEscape(key);
+      const v = volcUriEscape(val);
+      return `${k}=${v}`;
+    })
+    .filter(Boolean)
+    .join("&");
+}
+
+function volcSign(params) {
+  const {
+    method = "GET",
+    pathName = "/",
+    query = {},
+    headers = {},
+    accessKeyId = "",
+    secretAccessKey = "",
+    bodySha,
+  } = params;
+  const datetime = headers["X-Date"] || volcGetXDate();
+  const date = datetime.substring(0, 8);
+  const signedHeaderKeys = "host;x-date";
+  const canonicalHeaders = `host:${params.host || VOLC_CV_HOST}\nx-date:${datetime}\n`;
+  const canonicalRequest = [
+    method.toUpperCase(),
+    pathName,
+    volcQueryToString(query) || "",
+    canonicalHeaders,
+    signedHeaderKeys,
+    bodySha || volcHash(""),
+  ].join("\n");
+  const credentialScope = [date, VOLC_CV_REGION, VOLC_CV_SERVICE, "request"].join("/");
+  const stringToSign = ["HMAC-SHA256", datetime, credentialScope, volcHash(canonicalRequest)].join("\n");
+  const kDate = volcHmac(secretAccessKey, date);
+  const kRegion = volcHmac(kDate, VOLC_CV_REGION);
+  const kService = volcHmac(kRegion, VOLC_CV_SERVICE);
+  const kSigning = volcHmac(kService, "request");
+  const signature = volcHmac(kSigning, stringToSign).toString("hex");
+  return [
+    "HMAC-SHA256",
+    `Credential=${accessKeyId}/${credentialScope},`,
+    `SignedHeaders=${signedHeaderKeys},`,
+    `Signature=${signature}`,
+  ].join(" ");
+}
+
+app.post("/api/generate/faceswap", async (req, res) => {
+  const sendErr = (msg) => res.status(500).json({ error: msg });
+  try {
+    if (!VOLC_ACCESS_KEY || !VOLC_SECRET_KEY) {
+      return res.status(400).json({
+        error: "请配置火山引擎视觉 API 密钥：在 .env.local 中设置 VOLC_ACCESS_KEY 和 VOLC_SECRET_KEY",
+      });
+    }
+    const { templateBase64, imageBase64 } = req.body || {};
+    const template = typeof templateBase64 === "string" ? templateBase64.trim() : "";
+    const image = typeof imageBase64 === "string" ? imageBase64.trim() : "";
+    if (!template || !image) {
+      return res.status(400).json({ error: "需要 templateBase64（目标图/模版）和 imageBase64（源人脸）" });
+    }
+    const query = { Action: "FaceSwap", Version: "2020-08-26" };
+    const bodyParams = new URLSearchParams();
+    bodyParams.set("image_base64", image);
+    bodyParams.set("template_base64", template);
+    bodyParams.set("action_id", "faceswap");
+    bodyParams.set("version", "2.0");
+    const bodyString = bodyParams.toString();
+    const bodySha = volcHash(bodyString);
+    const xDate = volcGetXDate();
+    const authorization = volcSign({
+      method: "POST",
+      pathName: "/",
+      query,
+      headers: { "X-Date": xDate },
+      host: VOLC_CV_HOST,
+      accessKeyId: VOLC_ACCESS_KEY,
+      secretAccessKey: VOLC_SECRET_KEY,
+      bodySha,
+    });
+    const url = `https://${VOLC_CV_HOST}/?${volcQueryToString(query)}`;
+    const volcRes = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "X-Date": xDate,
+        Host: VOLC_CV_HOST,
+        Authorization: authorization,
+      },
+      body: bodyString,
+    });
+    const data = await volcRes.json();
+    if (data.ResponseMetadata && data.ResponseMetadata.Error) {
+      const err = data.ResponseMetadata.Error;
+      return sendErr(err.Message || err.Code || "火山引擎人像融合接口错误");
+    }
+    if (data.code !== undefined && data.code !== 10000) {
+      return sendErr(data.message || `接口错误: ${data.code}`);
+    }
+    const resultImageBase64 = data.data && data.data.image;
+    if (!resultImageBase64) {
+      return sendErr("未返回融合结果图");
+    }
+    res.json({
+      imageUrl: `data:image/jpeg;base64,${resultImageBase64}`,
+      message: "人脸替换完成（火山引擎人像融合）",
+    });
+  } catch (err) {
+    console.error("Volc FaceSwap error:", err);
+    sendErr(err && err.message ? err.message : "请求火山引擎人像融合失败");
+  }
+});
+
+/** SeedEdit 3.0 图生图-指令编辑（属性编辑）
+ * 两种接入方式（由前端 provider 选择）：
+ * - ark：火山方舟 https://ark.cn-beijing.volces.com，鉴权 Bearer，需配置 VOLC_SEEDEDIT_MODEL=ep-xxx
+ * - visual：智能视觉 https://visual.volcengineapi.com（文档 86081/1804561），鉴权 Bearer，可选 VOLC_VISUAL_SEEDEDIT_URL
+ */
+const VOLC_ARK_IMAGES_URL = "https://ark.cn-beijing.volces.com/api/v3/images/generations";
+const VOLC_VISUAL_IMAGES_URL = (
+  process.env.VOLC_VISUAL_SEEDEDIT_URL ||
+  process.env.VITE_VOLC_VISUAL_SEEDEDIT_URL ||
+  "https://visual.volcengineapi.com/api/v3/images/generations"
+).trim();
+const VOLC_SEEDEDIT_MODEL = (process.env.VOLC_SEEDEDIT_MODEL || process.env.VITE_VOLC_SEEDEDIT_MODEL || "").trim();
+const VOLC_VISUAL_SEEDEDIT_MODEL = (
+  process.env.VOLC_VISUAL_SEEDEDIT_MODEL ||
+  process.env.VITE_VOLC_VISUAL_SEEDEDIT_MODEL ||
+  "SeedEdit3.0"
+).trim();
+
+app.post("/api/generate/seededit", async (req, res) => {
+  const sendErr = (msg) => res.status(500).json({ error: msg });
+  try {
+    const { prompt, imageUrl, imageBase64, provider } = req.body || {};
+    const useVisual = String(provider || "ark").toLowerCase() === "visual";
+    const apiUrl = useVisual ? VOLC_VISUAL_IMAGES_URL : VOLC_ARK_IMAGES_URL;
+
+    if (!VOLC_ARK_API_KEY) {
+      return res.status(400).json({ error: "请在 .env.local 中配置 VOLC_ARK_API_KEY 或 VITE_VOLC_ARK_API_KEY" });
+    }
+    if (!useVisual && !VOLC_SEEDEDIT_MODEL) {
+      return res.status(400).json({
+        error:
+          "方舟方式需配置 VOLC_SEEDEDIT_MODEL 为接入点 ID（ep-xxx）。在火山方舟控制台部署「图生图-指令编辑 SeedEdit 3.0」后获取。",
+      });
+    }
+    const editPrompt = typeof prompt === "string" ? prompt.trim() : "";
+    if (!editPrompt) {
+      return res.status(400).json({ error: "需要 prompt（编辑指令）" });
+    }
+    let imageInput = typeof imageUrl === "string" ? imageUrl.trim() : "";
+    if (!imageInput && typeof imageBase64 === "string" && imageBase64.length > 0) {
+      imageInput = imageBase64.startsWith("data:") ? imageBase64 : `data:image/jpeg;base64,${imageBase64}`;
+    }
+    if (!imageInput) {
+      return res.status(400).json({ error: "需要 imageUrl 或 imageBase64（待编辑图片）" });
+    }
+    const modelValue = useVisual ? VOLC_VISUAL_SEEDEDIT_MODEL : VOLC_SEEDEDIT_MODEL;
+    const body = {
+      model: modelValue,
+      prompt: editPrompt,
+      image: imageInput,
+      size: "2k",
+      n: 1,
+      response_format: "url",
+      watermark: false,
+    };
+    const response = await fetch(apiUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${VOLC_ARK_API_KEY}`,
+      },
+      body: JSON.stringify(body),
+    });
+    const data = await response.json();
+    if (data.error) {
+      const msg = data.error.message || data.error.code || "";
+      if (/does not exist|you do not have access|不存在|无权/.test(String(msg)) && !useVisual) {
+        return sendErr(
+          "当前模型/接入点不可用。请在火山方舟控制台部署「图生图-指令编辑 SeedEdit 3.0」，将得到的接入点 ID（ep-xxx）配置到 .env.local 的 VOLC_SEEDEDIT_MODEL。",
+        );
+      }
+      return sendErr(msg || "SeedEdit 接口错误");
+    }
+    const imageUrlOut = data.data && data.data[0] && data.data[0].url;
+    if (!imageUrlOut) {
+      return sendErr("未返回编辑结果图");
+    }
+    res.json({
+      imageUrl: imageUrlOut,
+      message: useVisual ? "属性编辑完成（智能视觉 SeedEdit 3.0）" : "属性编辑完成（火山方舟 SeedEdit 3.0）",
+    });
+  } catch (err) {
+    console.error("Volc SeedEdit error:", err);
+    sendErr(err && err.message ? err.message : "请求 SeedEdit 失败");
+  }
+});
+
 const PORT = process.env.DETECT_PROXY_PORT || 3001;
 app.listen(PORT, () => {
   console.log(`Tencent IMS proxy: http://localhost:${PORT}/api/detect/tencent-ims`);
@@ -366,5 +605,11 @@ app.listen(PORT, () => {
   if (VOLC_ARK_API_KEY && VOLC_ARK_VISION_MODEL) {
     console.log(`Volc Ark 图片敏感检测: http://localhost:${PORT}/api/detect/volc-ims`);
     console.log(`Volc Ark 视频敏感检测: http://localhost:${PORT}/api/detect/volc-video-ims`);
+  }
+  if (VOLC_ACCESS_KEY && VOLC_SECRET_KEY) {
+    console.log(`Volc 人像融合(人脸替换): http://localhost:${PORT}/api/generate/faceswap`);
+  }
+  if (VOLC_ARK_API_KEY) {
+    console.log(`Volc SeedEdit(属性编辑): http://localhost:${PORT}/api/generate/seededit`);
   }
 });

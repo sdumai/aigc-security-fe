@@ -17,6 +17,8 @@ export default defineConfig({
       "/api/detect/tencent-video-ims": { target: "http://localhost:3001", changeOrigin: true },
       "/api/detect/volc-ims": { target: "http://localhost:3001", changeOrigin: true },
       "/api/detect/volc-video-ims": { target: "http://localhost:3001", changeOrigin: true },
+      "/api/generate/faceswap": { target: "http://localhost:3001", changeOrigin: true },
+      "/api/generate/seededit": { target: "http://localhost:3001", changeOrigin: true },
     },
   },
 });

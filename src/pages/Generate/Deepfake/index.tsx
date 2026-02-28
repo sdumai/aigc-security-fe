@@ -15,12 +15,18 @@ import {
   Image,
   Space,
   Alert,
+  Input,
 } from "antd";
 import { UploadOutlined, ThunderboltOutlined, DownloadOutlined } from "@ant-design/icons";
 import type { UploadFile } from "antd";
 import request from "@/utils/request";
 
 const { Title, Paragraph } = Typography;
+const { TextArea } = Input;
+
+const VOLC_ARK_API_KEY = (import.meta.env.VITE_VOLC_ARK_API_KEY ?? "").trim();
+const VOLC_ARK_BASE = "https://ark.cn-beijing.volces.com/api/v3";
+const VOLC_ARK_I2V_MODEL = "doubao-seedance-1-0-lite-i2v-250428";
 
 type FunctionType = "faceswap" | "fomm" | "stargan";
 type ModelType =
@@ -38,7 +44,8 @@ type ModelType =
   | "STGAN";
 
 interface GenerateResult {
-  imageUrl: string;
+  imageUrl?: string;
+  videoUrl?: string;
   message: string;
 }
 
@@ -57,16 +64,35 @@ const DeepfakeGeneratePage = () => {
     stargan: ["StarGAN", "StarGAN-v2", "AttGAN", "STGAN"],
   };
 
+  const getBase64FromUploadFile = (file: UploadFile): Promise<string> => {
+    const dataUrl = (file as any).url;
+    if (typeof dataUrl === "string" && dataUrl.indexOf(",") >= 0) {
+      return Promise.resolve(dataUrl.split(",")[1] || "");
+    }
+    const raw = (file as any).originFileObj;
+    if (!(raw instanceof File)) return Promise.resolve("");
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const s = (reader.result as string) || "";
+        resolve(s.indexOf(",") >= 0 ? s.split(",")[1] : s);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(raw);
+    });
+  };
+
   const handleGenerate = async () => {
     try {
       await form.validateFields();
+      const values = form.getFieldsValue();
 
       if (targetFile.length === 0) {
         message.warning("请上传目标人脸图片");
         return;
       }
 
-      if (sourceFile.length === 0) {
+      if (values.function === "faceswap" && sourceFile.length === 0) {
         message.warning("请上传驱动人脸/视频");
         return;
       }
@@ -74,17 +100,147 @@ const DeepfakeGeneratePage = () => {
       setLoading(true);
       setResult(null);
 
-      const values = form.getFieldsValue();
-
-      // 模拟生成延迟（2-3秒）
-      await new Promise((resolve) => setTimeout(resolve, 2500));
-
-      // 所有功能都使用硬编码的图片
-      const resultImage = "/mock/faceswap_hardcoded.png";
-
       const functionName =
         values.function === "faceswap" ? "人脸替换" : values.function === "fomm" ? "人脸动画" : "属性编辑";
 
+      if (values.function === "faceswap") {
+        const targetBase64 = await getBase64FromUploadFile(targetFile[0]);
+        const sourceBase64 = await getBase64FromUploadFile(sourceFile[0]);
+        if (!targetBase64 || !sourceBase64) {
+          message.error("无法读取图片，请重新上传");
+          setLoading(false);
+          return;
+        }
+        // 接口约定：image_base64=目标图（被换脸的那张），template_base64=模版（要换上去的脸）
+        const res = await fetch("/api/generate/faceswap", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            imageBase64: targetBase64,
+            templateBase64: sourceBase64,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data.error || "人脸替换请求失败");
+        }
+        setResult({
+          imageUrl: data.imageUrl || "",
+          message: data.message || `使用火山引擎人像融合完成${functionName}。`,
+        });
+        message.success("生成成功！");
+        return;
+      }
+
+      if (values.function === "fomm") {
+        if (!VOLC_ARK_API_KEY) {
+          message.error("请配置 .env.local 中的 VITE_VOLC_ARK_API_KEY");
+          setLoading(false);
+          return;
+        }
+        const targetDataUrl = (targetFile[0] as any)?.url;
+        let imageDataUrl = targetDataUrl;
+        if (!imageDataUrl && (targetFile[0] as any)?.originFileObj) {
+          const file = (targetFile[0] as any).originFileObj as File;
+          imageDataUrl = await new Promise<string>((resolve, reject) => {
+            const r = new FileReader();
+            r.onload = () => resolve(r.result as string);
+            r.onerror = reject;
+            r.readAsDataURL(file);
+          });
+        }
+        if (!imageDataUrl) {
+          message.error("无法读取目标人脸图片");
+          setLoading(false);
+          return;
+        }
+        const fommPrompt = (values.fommPrompt ?? "").trim() || "让图中人脸做自然的微笑和轻微点头动作";
+        const content: Array<{ type: string; text?: string; image_url?: { url: string }; role?: string }> = [
+          { type: "text", text: fommPrompt },
+          { type: "image_url", image_url: { url: imageDataUrl }, role: "reference_image" },
+        ];
+        const createRes = await fetch(`${VOLC_ARK_BASE}/contents/generations/tasks`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${VOLC_ARK_API_KEY}`,
+          },
+          body: JSON.stringify({
+            model: VOLC_ARK_I2V_MODEL,
+            content,
+            ratio: "16:9",
+            duration: 5,
+          }),
+        });
+        if (!createRes.ok) {
+          const err = await createRes.json().catch(() => ({}));
+          throw new Error(err?.error?.message || `创建任务失败 ${createRes.status}`);
+        }
+        const createData = await createRes.json();
+        const taskId = createData?.id;
+        if (!taskId) throw new Error("未返回任务 ID");
+        const maxAttempts = 120;
+        const pollInterval = 3000;
+        for (let i = 0; i < maxAttempts; i++) {
+          const getRes = await fetch(`${VOLC_ARK_BASE}/contents/generations/tasks/${taskId}`, {
+            headers: { Authorization: `Bearer ${VOLC_ARK_API_KEY}` },
+          });
+          if (!getRes.ok) throw new Error(`查询任务失败 ${getRes.status}`);
+          const taskData = await getRes.json();
+          const status = taskData?.status;
+          if (status === "succeeded") {
+            const videoUrl = taskData?.content?.video_url ?? taskData?.output?.video_url;
+            if (!videoUrl) throw new Error("未返回视频地址");
+            setResult({
+              videoUrl,
+              message: "人脸动画视频生成成功（图生视频 I2V）",
+            });
+            message.success("生成成功！");
+            return;
+          }
+          if (status === "failed") {
+            const errMsg = taskData?.error?.message ?? taskData?.message ?? "生成失败";
+            throw new Error(errMsg);
+          }
+          await new Promise((r) => setTimeout(r, pollInterval));
+        }
+        throw new Error("生成超时，请稍后重试");
+      }
+
+      if (values.function === "stargan") {
+        const editPrompt = (values.editPrompt ?? "").trim();
+        if (!editPrompt) {
+          message.warning("请输入编辑指令");
+          setLoading(false);
+          return;
+        }
+        const imageBase64 = await getBase64FromUploadFile(targetFile[0]);
+        if (!imageBase64) {
+          message.error("无法读取图片，请重新上传");
+          setLoading(false);
+          return;
+        }
+        const provider = (values.seededitProvider || "ark") as "ark" | "visual";
+        const res = await fetch("/api/generate/seededit", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ prompt: editPrompt, imageBase64, provider }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data.error || "属性编辑请求失败");
+        }
+        setResult({
+          imageUrl: data.imageUrl || "",
+          message: data.message || `使用火山引擎 SeedEdit 完成${functionName}。`,
+        });
+        message.success("生成成功！");
+        return;
+      }
+
+      // FOMM 仍为模拟
+      await new Promise((resolve) => setTimeout(resolve, 2500));
+      const resultImage = "/mock/faceswap_hardcoded.png";
       setResult({
         imageUrl: resultImage,
         message: `使用 ${values.model} 模型完成${functionName}，效果逼真自然！`,
@@ -92,57 +248,53 @@ const DeepfakeGeneratePage = () => {
       message.success("生成成功！");
     } catch (error) {
       console.error("Generate error:", error);
-      message.error("生成失败，请重试");
+      message.error(error instanceof Error ? error.message : "生成失败，请重试");
     } finally {
       setLoading(false);
     }
   };
 
   const handleDownload = async () => {
-    if (!result?.imageUrl) return;
+    const url = result?.videoUrl ?? result?.imageUrl;
+    if (!url) return;
 
     const values = form.getFieldsValue();
     const functionName = values.function === "faceswap" ? "faceswap" : values.function === "fomm" ? "fomm" : "stargan";
+    const isVideo = !!result?.videoUrl;
 
     try {
       message.loading("正在下载...", 0);
-
-      // 使用 fetch 获取图片数据，避免跨域问题
-      const response = await fetch(result.imageUrl);
+      const response = await fetch(url);
       const blob = await response.blob();
-
-      // 创建 blob URL 并下载
       const blobUrl = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = blobUrl;
-      link.download = `deepfake-${functionName}-${Date.now()}.jpg`;
+      link.download = `deepfake-${functionName}-${Date.now()}.${isVideo ? "mp4" : "jpg"}`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-
-      // 清理 blob URL
       URL.revokeObjectURL(blobUrl);
-
       message.destroy();
       message.success("下载成功！");
     } catch (error) {
       message.destroy();
       console.error("Download error:", error);
-      // 如果 fetch 失败，回退到直接打开链接
-      window.open(result.imageUrl, "_blank");
-      message.info("已在新标签页打开图片，请右键保存");
+      window.open(url, "_blank");
+      message.info(isVideo ? "已在新标签页打开视频，请右键另存为" : "已在新标签页打开图片，请右键保存");
     }
   };
 
   const handleSave = async () => {
     try {
       const values = form.getFieldsValue();
+      const saveUrl = result?.videoUrl ?? result?.imageUrl;
+      if (!saveUrl) return;
       await request.post("/data/save", {
-        type: "image",
+        type: result?.videoUrl ? "video" : "image",
         title: `Deepfake ${
           values.function === "faceswap" ? "人脸替换" : values.function === "fomm" ? "人脸动画" : "属性编辑"
         }`,
-        url: result?.imageUrl,
+        url: saveUrl,
         model: values.model,
       });
       message.success({
@@ -187,6 +339,9 @@ const DeepfakeGeneratePage = () => {
               initialValues={{
                 function: "faceswap",
                 model: "FaceShifter",
+                editPrompt: "把头发改成黑色，保持人脸不变",
+                seededitProvider: "ark",
+                fommPrompt: "让图中人脸做自然的微笑和轻微点头动作",
               }}
             >
               <Form.Item label="上传目标人脸图片" name="target" tooltip="将被替换或编辑的目标人脸">
@@ -221,37 +376,77 @@ const DeepfakeGeneratePage = () => {
                 </Upload>
               </Form.Item>
 
-              <Form.Item label="上传驱动人脸/视频" name="source" tooltip="用于替换的源人脸或驱动视频">
-                <Upload
-                  listType="picture-card"
-                  fileList={sourceFile}
-                  maxCount={1}
-                  beforeUpload={(file) => {
-                    const reader = new FileReader();
-                    reader.onload = (e) => {
-                      setSourceFile([
-                        {
-                          uid: file.uid,
-                          name: file.name,
-                          status: "done",
-                          url: e.target?.result as string,
-                          originFileObj: file,
-                        } as any,
-                      ]);
-                    };
-                    reader.readAsDataURL(file);
-                    return false;
-                  }}
-                  onRemove={() => setSourceFile([])}
+              {functionType === "faceswap" && (
+                <Form.Item label="上传驱动人脸/视频" name="source" tooltip="用于替换的源人脸或驱动视频">
+                  <Upload
+                    listType="picture-card"
+                    fileList={sourceFile}
+                    maxCount={1}
+                    beforeUpload={(file) => {
+                      const reader = new FileReader();
+                      reader.onload = (e) => {
+                        setSourceFile([
+                          {
+                            uid: file.uid,
+                            name: file.name,
+                            status: "done",
+                            url: e.target?.result as string,
+                            originFileObj: file,
+                          } as any,
+                        ]);
+                      };
+                      reader.readAsDataURL(file);
+                      return false;
+                    }}
+                    onRemove={() => setSourceFile([])}
+                  >
+                    {sourceFile.length === 0 && (
+                      <div>
+                        <UploadOutlined />
+                        <div style={{ marginTop: 8 }}>上传图片/视频</div>
+                      </div>
+                    )}
+                  </Upload>
+                </Form.Item>
+              )}
+
+              {functionType === "fomm" && (
+                <Form.Item
+                  label="动作描述"
+                  name="fommPrompt"
+                  tooltip="描述希望人脸做的动作，如：微笑、点头、说话。留空则使用默认自然微动"
                 >
-                  {sourceFile.length === 0 && (
-                    <div>
-                      <UploadOutlined />
-                      <div style={{ marginTop: 8 }}>上传图片/视频</div>
-                    </div>
-                  )}
-                </Upload>
-              </Form.Item>
+                  <TextArea
+                    rows={2}
+                    placeholder="例如：让图中人脸做自然的微笑和轻微点头动作"
+                    maxLength={300}
+                    showCount
+                  />
+                </Form.Item>
+              )}
+
+              {functionType === "stargan" && (
+                <>
+                  <Form.Item
+                    label="接入方式"
+                    name="seededitProvider"
+                    tooltip="方舟：需在控制台部署 SeedEdit 并配置 ep-xxx；智能视觉：文档 86081 接口地址 visual.volcengineapi.com"
+                  >
+                    <Radio.Group>
+                      <Radio value="ark">火山方舟（Ark）</Radio>
+                      <Radio value="visual">智能视觉（Visual）</Radio>
+                    </Radio.Group>
+                  </Form.Item>
+                  <Form.Item
+                    label="编辑指令"
+                    name="editPrompt"
+                    rules={[{ required: true, message: "请输入编辑指令" }]}
+                    tooltip="用自然语言描述要对图片做的修改，如：把头发改成红色、加一副眼镜、换成微笑表情"
+                  >
+                    <TextArea rows={3} placeholder="例如：把头发改成黑色，保持人脸不变" maxLength={500} showCount />
+                  </Form.Item>
+                </>
+              )}
 
               <Form.Item label="功能选择" name="function" rules={[{ required: true, message: "请选择功能" }]}>
                 <Radio.Group
@@ -306,12 +501,21 @@ const DeepfakeGeneratePage = () => {
               </div>
             ) : result ? (
               <div>
-                <Image
-                  src={result.imageUrl}
-                  alt="生成结果"
-                  style={{ width: "100%", borderRadius: 8 }}
-                  fallback="https://via.placeholder.com/512x512?text=Generated+Result"
-                />
+                {result.videoUrl ? (
+                  <video
+                    src={result.videoUrl}
+                    controls
+                    style={{ width: "100%", borderRadius: 8 }}
+                    title="人脸动画结果"
+                  />
+                ) : result.imageUrl ? (
+                  <Image
+                    src={result.imageUrl}
+                    alt="生成结果"
+                    style={{ width: "100%", borderRadius: 8 }}
+                    fallback="https://via.placeholder.com/512x512?text=Generated+Result"
+                  />
+                ) : null}
                 <Alert
                   message="生成成功"
                   description={result.message}
