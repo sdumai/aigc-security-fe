@@ -15,6 +15,8 @@ export default defineConfig({
     proxy: {
       "/api/detect/tencent-ims": { target: "http://localhost:3001", changeOrigin: true },
       "/api/detect/tencent-video-ims": { target: "http://localhost:3001", changeOrigin: true },
+      "/api/detect/volc-ims": { target: "http://localhost:3001", changeOrigin: true },
+      "/api/detect/volc-video-ims": { target: "http://localhost:3001", changeOrigin: true },
     },
   },
 });

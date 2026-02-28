@@ -19,10 +19,16 @@ const TENCENT_IMS_BIZTYPE = (process.env.TENCENT_IMS_BIZTYPE || process.env.VITE
 const DETECT_VIDEO_PUBLIC_URL = (process.env.DETECT_VIDEO_PUBLIC_URL || "").trim();
 const COS_BUCKET = (process.env.COS_BUCKET || "").trim();
 const COS_REGION = (process.env.COS_REGION || "ap-guangzhou").trim();
+const VOLC_ARK_API_KEY = (process.env.VOLC_ARK_API_KEY || process.env.VITE_VOLC_ARK_API_KEY || "").trim();
+const VOLC_ARK_VISION_MODEL = (
+  process.env.VOLC_ARK_VISION_MODEL ||
+  process.env.VITE_VOLC_ARK_VISION_MODEL ||
+  ""
+).trim();
 
 const app = express();
 app.use(cors());
-app.use(express.json({ limit: "8mb" }));
+app.use(express.json({ limit: "30mb" }));
 
 const uploadDir = path.join(__dirname, "uploads");
 if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
@@ -151,6 +157,133 @@ app.post("/api/detect/tencent-ims", async (req, res) => {
   }
 });
 
+/** 火山方舟图片理解：敏感内容检测（Chat 多模态 API）
+ * @see https://www.volcengine.com/docs/82379/1362931
+ * 需在控制台创建「支持视觉」的模型接入点，将 endpoint_id 配到 VOLC_ARK_VISION_MODEL
+ */
+const VOLC_ARK_CHAT_URL = "https://ark.cn-beijing.volces.com/api/v3/chat/completions";
+const VOLC_SAFE_PROMPT = `你是一个图片内容安全审核助手。请判断该图片是否包含以下违规内容：暴力血腥、色情低俗、政治敏感、仇恨符号、毒品赌博、未成年人不当内容等。
+仅输出一个 JSON 对象，不要其他文字。格式：{"safe": true或false, "suggestion": "pass或review或block", "labels": ["标签1","标签2"], "reason": "简短原因"}
+若内容安全则 safe 为 true、suggestion 为 pass、labels 为空数组；否则 safe 为 false，suggestion 为 review 或 block，labels 列出违规类型。`;
+
+app.post("/api/detect/volc-ims", async (req, res) => {
+  const sendErr = (msg) => res.status(500).json({ error: msg });
+  try {
+    if (!VOLC_ARK_API_KEY) {
+      return sendErr("请在 .env.local 中配置 VOLC_ARK_API_KEY 或 VITE_VOLC_ARK_API_KEY");
+    }
+    if (!VOLC_ARK_VISION_MODEL) {
+      return sendErr(
+        "请在 .env.local 中配置 VOLC_ARK_VISION_MODEL（火山方舟控制台中「支持视觉」的模型接入点 ID，如 ep-xxx）",
+      );
+    }
+    const { imageUrl, imageBase64 } = req.body || {};
+    let imageInput;
+    if (imageUrl && typeof imageUrl === "string") {
+      imageInput = { type: "image_url", image_url: { url: imageUrl.trim() } };
+    } else if (imageBase64 && typeof imageBase64 === "string") {
+      const dataUrl = imageBase64.startsWith("data:") ? imageBase64 : `data:image/jpeg;base64,${imageBase64}`;
+      imageInput = { type: "image_url", image_url: { url: dataUrl } };
+    } else {
+      return res.status(400).json({ error: "需要 imageUrl 或 imageBase64" });
+    }
+    const response = await fetch(VOLC_ARK_CHAT_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${VOLC_ARK_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: VOLC_ARK_VISION_MODEL,
+        messages: [
+          {
+            role: "user",
+            content: [imageInput, { type: "text", text: VOLC_SAFE_PROMPT }],
+          },
+        ],
+        max_tokens: 512,
+        temperature: 0.1,
+      }),
+    });
+    const data = await response.json();
+    if (data.error) {
+      return sendErr(data.error.message || data.error.code || "火山方舟接口错误");
+    }
+    const text = data.choices?.[0]?.message?.content?.trim() || "";
+    let parsed = { safe: true, suggestion: "pass", labels: [], reason: "" };
+    try {
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if (jsonMatch) parsed = JSON.parse(jsonMatch[0]);
+    } catch (_) {}
+    res.json(parsed);
+  } catch (err) {
+    console.error("Volc IMS error:", err);
+    sendErr(err && err.message ? err.message : "请求火山方舟失败");
+  }
+});
+
+/** 火山方舟视频理解：视频敏感内容检测（Chat 多模态 API）
+ * @see https://www.volcengine.com/docs/82379/1895586
+ * 入参：videoUrl 公网可访问的视频地址，或 videoBase64 视频的 base64（与文档中 data:video/mp4;base64, 一致）
+ */
+const VOLC_VIDEO_SAFE_PROMPT = `你是一个视频内容安全审核助手。请观看该视频，判断是否包含以下违规内容：暴力血腥、色情低俗、政治敏感、仇恨符号、毒品赌博、未成年人不当内容等。
+仅输出一个 JSON 对象，不要其他文字。格式：{"safe": true或false, "suggestion": "pass或review或block", "labels": ["标签1","标签2"], "reason": "简短原因"}
+若内容安全则 safe 为 true、suggestion 为 pass、labels 为空数组；否则 safe 为 false，suggestion 为 review 或 block，labels 列出违规类型。`;
+
+app.post("/api/detect/volc-video-ims", async (req, res) => {
+  const sendErr = (msg) => res.status(500).json({ error: msg });
+  try {
+    if (!VOLC_ARK_API_KEY) {
+      return sendErr("请在 .env.local 中配置 VOLC_ARK_API_KEY 或 VITE_VOLC_ARK_API_KEY");
+    }
+    if (!VOLC_ARK_VISION_MODEL) {
+      return sendErr("请在 .env.local 中配置 VOLC_ARK_VISION_MODEL（支持视频理解的模型接入点 ID，如 ep-xxx）");
+    }
+    const { videoUrl, videoBase64 } = req.body || {};
+    let videoUrlValue = typeof videoUrl === "string" ? videoUrl.trim() : "";
+    if (!videoUrlValue && typeof videoBase64 === "string" && videoBase64.length > 0) {
+      videoUrlValue = videoBase64.startsWith("data:") ? videoBase64 : `data:video/mp4;base64,${videoBase64}`;
+    }
+    if (!videoUrlValue) {
+      return res.status(400).json({ error: "需要 videoUrl（公网可访问的视频地址）或 videoBase64（视频 Base64 编码）" });
+    }
+    // 文档 Base64 传入：video_url 为 "data:video/mp4;base64,{base64}"（与 https://www.volcengine.com/docs/82379/1895586 一致）
+    const videoContentBlock = { type: "video_url", video_url: { url: videoUrlValue } };
+    const response = await fetch(VOLC_ARK_CHAT_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${VOLC_ARK_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: VOLC_ARK_VISION_MODEL,
+        messages: [
+          {
+            role: "user",
+            content: [videoContentBlock, { type: "text", text: VOLC_VIDEO_SAFE_PROMPT }],
+          },
+        ],
+        max_tokens: 512,
+        temperature: 0.1,
+      }),
+    });
+    const data = await response.json();
+    if (data.error) {
+      return sendErr(data.error.message || data.error.code || "火山方舟接口错误");
+    }
+    const text = data.choices?.[0]?.message?.content?.trim() || "";
+    let parsed = { safe: true, suggestion: "pass", labels: [], reason: "" };
+    try {
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if (jsonMatch) parsed = JSON.parse(jsonMatch[0]);
+    } catch (_) {}
+    res.json(parsed);
+  } catch (err) {
+    console.error("Volc video IMS error:", err);
+    sendErr(err && err.message ? err.message : "请求火山方舟失败");
+  }
+});
+
 const VIDEO_AIGC_BIZTYPE = "aigc_video_detect_100046462053";
 
 /** 视频 AI 生成检测：创建任务并轮询直到完成（最多约 5 分钟） */
@@ -230,4 +363,8 @@ const PORT = process.env.DETECT_PROXY_PORT || 3001;
 app.listen(PORT, () => {
   console.log(`Tencent IMS proxy: http://localhost:${PORT}/api/detect/tencent-ims`);
   console.log(`Tencent Video AIGC proxy: http://localhost:${PORT}/api/detect/tencent-video-ims`);
+  if (VOLC_ARK_API_KEY && VOLC_ARK_VISION_MODEL) {
+    console.log(`Volc Ark 图片敏感检测: http://localhost:${PORT}/api/detect/volc-ims`);
+    console.log(`Volc Ark 视频敏感检测: http://localhost:${PORT}/api/detect/volc-video-ims`);
+  }
 });

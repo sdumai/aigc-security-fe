@@ -17,6 +17,7 @@ import {
   Input,
   Tabs,
   Checkbox,
+  Radio,
 } from "antd";
 import {
   UploadOutlined,
@@ -26,8 +27,13 @@ import {
   SafetyOutlined,
   DownloadOutlined,
   LinkOutlined,
+  PictureOutlined,
+  VideoCameraOutlined,
 } from "@ant-design/icons";
 import type { UploadFile, UploadProps } from "antd";
+import { imageModerationViaProxy } from "@/utils/tencentIms";
+
+const SENSITIVE_BIZTYPE = (import.meta.env.VITE_TENCENT_IMS_SAFE_BIZTYPE ?? "").trim() || "";
 
 const { Title, Paragraph, Text } = Typography;
 const { Dragger } = Upload;
@@ -93,9 +99,32 @@ const UnsafeDetectPage = () => {
   const [uploadedFile, setUploadedFile] = useState<UploadFile | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string>("");
   const [urlInput, setUrlInput] = useState<string>("");
+  const [contentKind, setContentKind] = useState<"image" | "video">("image"); // 顶层 Tab：图片敏感检测 | 视频敏感检测
   const [activeTab, setActiveTab] = useState<string>("upload");
-  const [selectedModels, setSelectedModels] = useState<string[]>(["Google-SafeSearch"]); // 默认选中第一个
+  const [selectedModels, setSelectedModels] = useState<string[]>(["Google-SafeSearch"]);
+  const [detectionProvider, setDetectionProvider] = useState<"tencent" | "volc">("volc");
   const [currentStep, setCurrentStep] = useState<number>(1); // 1: 上传, 2: 选择方法, 3: 检测结果
+  // 视频 Tab 专用
+  const [videoUploadedUrl, setVideoUploadedUrl] = useState<string>("");
+  const [videoFile, setVideoFile] = useState<File | null>(null);
+  const [videoUrlInput, setVideoUrlInput] = useState<string>("");
+  const [videoPreviewUrl, setVideoPreviewUrl] = useState<string>("");
+  const [videoUploadFileName, setVideoUploadFileName] = useState<string>("");
+  const [videoUploading, setVideoUploading] = useState(false);
+  const [videoInputTab, setVideoInputTab] = useState<"upload" | "url">("upload");
+  const VIDEO_BASE64_MAX_BYTES = 20 * 1024 * 1024;
+
+  const fileToBase64 = (file: File): Promise<string> =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const dataUrl = reader.result as string;
+        const base64 = dataUrl.indexOf(",") >= 0 ? dataUrl.split(",")[1] : dataUrl;
+        resolve(base64 || "");
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
 
   const handleUpload: UploadProps["customRequest"] = async (options) => {
     const { file } = options;
@@ -149,12 +178,118 @@ const UnsafeDetectPage = () => {
     }
   };
 
+  const handleVideoUrlLoad = () => {
+    const url = videoUrlInput.trim();
+    if (!url) {
+      message.warning("请输入视频 URL");
+      return;
+    }
+    try {
+      new URL(url);
+    } catch {
+      message.error("URL 格式不正确");
+      return;
+    }
+    setVideoFile(null);
+    setVideoUploadedUrl(url);
+    setVideoPreviewUrl(url);
+    setVideoUploadFileName(url.split("/").pop() || "视频");
+    setCurrentStep(2);
+    message.success("已加载视频地址，可开始检测");
+  };
+
+  const handleVideoUpload: UploadProps["customRequest"] = async (options) => {
+    const file = options.file as File;
+    if (!file.type.startsWith("video/")) {
+      message.error("请选择视频文件（如 MP4）");
+      return;
+    }
+    setVideoFile(file);
+    setVideoPreviewUrl(URL.createObjectURL(file));
+    setVideoUploadFileName(file.name || "视频");
+    setCurrentStep(2);
+    const useBase64 = file.size <= VIDEO_BASE64_MAX_BYTES;
+    if (useBase64) {
+      setVideoUploadedUrl("");
+      message.success("视频已选择，将使用 Base64 直接检测（无需 COS）");
+      return;
+    }
+    setVideoUploading(true);
+    setVideoUploadedUrl("");
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch("/api/detect/tencent-video-ims/upload", { method: "POST", body: formData });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "上传失败");
+      setVideoUploadedUrl(data.url);
+      message.success("视频上传成功，可开始检测");
+    } catch (e) {
+      message.error(e instanceof Error ? e.message : "大视频需上传到 COS，请配置 COS 或使用视频 URL");
+    } finally {
+      setVideoUploading(false);
+    }
+  };
+
   const handleDetect = async () => {
+    if (contentKind === "video") {
+      const hasUrl = !!videoUploadedUrl;
+      const hasFile = !!videoFile && videoFile.size <= VIDEO_BASE64_MAX_BYTES;
+      if (!hasUrl && !hasFile) {
+        message.warning("请先上传视频或输入视频 URL 并加载");
+        return;
+      }
+      try {
+        setLoading(true);
+        setResult(null);
+        const body: { videoUrl?: string; videoBase64?: string } = {};
+        if (hasFile && videoFile) {
+          body.videoBase64 = await fileToBase64(videoFile);
+        } else {
+          body.videoUrl = videoUploadedUrl;
+        }
+        const res = await fetch("/api/detect/volc-video-ims", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "火山方舟视频检测失败");
+        const safe = data.safe === true;
+        const suggestion = (data.suggestion || "pass").toLowerCase();
+        const labels: string[] = Array.isArray(data.labels) ? data.labels : [];
+        const reason = data.reason || "";
+        const risk: RiskLevel = suggestion === "block" ? "high" : suggestion === "review" ? "medium" : "low";
+        const riskScore = safe ? 10 : suggestion === "block" ? 80 : 50;
+        const suggestions: string[] = safe
+          ? ["内容安全，可以正常发布", reason || "未检测到违规内容"]
+          : [reason || "建议人工复审", ...labels.map((l: string) => `违规类型：${l}`)];
+        const details: DetectionResult["details"] = {};
+        labels.forEach((l: string) => {
+          details[l] = { score: suggestion === "block" ? 0.9 : 0.6 };
+        });
+        setResult({
+          violations: labels,
+          risk,
+          riskScore,
+          suggestions,
+          details,
+        });
+        setCurrentStep(3);
+        message.success("火山方舟视频敏感检测完成");
+        setTimeout(() => window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" }), 100);
+      } catch (error) {
+        message.error(error instanceof Error ? error.message : "检测失败，请重试");
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+
     if (!uploadedFile) {
       message.warning("请先上传文件");
       return;
     }
-
     if (selectedModels.length === 0) {
       message.warning("请至少选择一个检测模型");
       return;
@@ -164,68 +299,102 @@ const UnsafeDetectPage = () => {
       setLoading(true);
       setResult(null);
 
-      // 模拟检测延迟（1.5-2秒）
-      await new Promise((resolve) => setTimeout(resolve, 1800));
-
-      // 根据不同的输入源返回不同的 hardcode 结果
       let detectionResult: DetectionResult;
 
-      if (activeTab === "upload" && previewUrl.startsWith("blob:")) {
-        // 本地上传的图片：硬编码为暴力血腥内容
+      if (detectionProvider === "volc") {
+        // 火山方舟图片理解
+        const body: { imageUrl?: string; imageBase64?: string } = {};
+        if (activeTab === "url" && urlInput.trim()) {
+          body.imageUrl = urlInput.trim();
+        } else {
+          const rawFile = (uploadedFile as UploadFile).originFileObj ?? (uploadedFile as unknown as File);
+          if (rawFile instanceof File) {
+            body.imageBase64 = await fileToBase64(rawFile);
+          } else {
+            message.error("无法读取图片，请重新上传");
+            setLoading(false);
+            return;
+          }
+        }
+        const res = await fetch("/api/detect/volc-ims", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data.error || "火山方舟检测失败");
+        }
+        const safe = data.safe === true;
+        const suggestion = (data.suggestion || "pass").toLowerCase();
+        const labels: string[] = Array.isArray(data.labels) ? data.labels : [];
+        const reason = data.reason || "";
+        const risk: RiskLevel = suggestion === "block" ? "high" : suggestion === "review" ? "medium" : "low";
+        const riskScore = safe ? Math.min(20, 5 + labels.length * 2) : suggestion === "block" ? 80 : 50;
+        const suggestions: string[] = safe
+          ? ["内容安全，可以正常发布", reason || "未检测到违规内容"]
+          : [reason || "建议人工复审", ...labels.map((l: string) => `违规类型：${l}`)];
+        const details: DetectionResult["details"] = {};
+        labels.forEach((l: string) => {
+          details[l] = { score: suggestion === "block" ? 0.9 : 0.6 };
+        });
         detectionResult = {
-          violations: ["violence"],
-          risk: "high" as RiskLevel,
-          riskScore: 78,
-          suggestions: [
-            "检测到暴力血腥内容，建议添加内容警告",
-            "建议模糊化处理暴力画面",
-            "不建议向未成年人展示",
-            "需要人工复审确认",
-          ],
-          details: {
-            violence: {
-              score: 0.78,
-              regions: [
-                { x: 25, y: 20, width: 50, height: 60 },
-                { x: 40, y: 30, width: 35, height: 45 },
-              ],
-            },
-          },
-        };
-      } else if (activeTab === "url" && urlInput) {
-        // URL解析的图片：硬编码为安全内容
-        detectionResult = {
-          violations: [],
-          risk: "low" as RiskLevel,
-          riskScore: 3,
-          suggestions: ["内容安全，可以正常发布", "未检测到违规内容"],
-          details: {},
+          violations: labels,
+          risk,
+          riskScore,
+          suggestions,
+          details,
         };
       } else {
-        // 默认情况
-        detectionResult = {
-          violations: [],
-          risk: "low" as RiskLevel,
-          riskScore: 5,
-          suggestions: ["内容安全，可以正常发布"],
-          details: {},
-        };
+        // 腾讯云内容安全
+        let fileContent: string | undefined;
+        let fileUrl: string | undefined;
+        if (activeTab === "url" && urlInput.trim()) {
+          fileUrl = urlInput.trim();
+        } else {
+          const rawFile = (uploadedFile as UploadFile).originFileObj ?? (uploadedFile as unknown as File);
+          if (rawFile instanceof File) {
+            fileContent = await fileToBase64(rawFile);
+          } else {
+            message.error("无法读取图片，请重新上传");
+            setLoading(false);
+            return;
+          }
+        }
+        const tencentRes = await imageModerationViaProxy({
+          ...(fileContent ? { FileContent: fileContent } : {}),
+          ...(fileUrl ? { FileUrl: fileUrl } : {}),
+          ...(SENSITIVE_BIZTYPE ? { BizType: SENSITIVE_BIZTYPE } : {}),
+        });
+        const r = tencentRes.Response;
+        const sug = (r?.Suggestion || "Pass").toLowerCase();
+        const risk: RiskLevel = sug === "block" ? "high" : sug === "review" ? "medium" : "low";
+        const labelResults = r?.LabelResults || [];
+        const violations = labelResults.map((x) => (x.Label || x.Scene || "").toLowerCase()).filter(Boolean);
+        const riskScore = sug === "block" ? 85 : sug === "review" ? 55 : 10;
+        const suggestions: string[] =
+          sug === "pass"
+            ? ["内容安全，可以正常发布", "未检测到违规内容"]
+            : [...violations.map((v) => `检测到：${v}`), "建议人工复审"];
+        const details: DetectionResult["details"] = {};
+        labelResults.forEach((x) => {
+          const key = (x.Label || x.Scene || "").toLowerCase();
+          if (key) details[key] = { score: (x.Score ?? 0) / 100 };
+        });
+        detectionResult = { violations, risk, riskScore, suggestions, details };
       }
 
       setResult(detectionResult);
-      setCurrentStep(3); // 进入结果展示步骤
-      message.success(`使用 ${selectedModels.join(", ")} 检测完成！`);
-
-      // 滚动到结果区域
+      setCurrentStep(3);
+      message.success(
+        `使用 ${detectionProvider === "volc" ? "火山方舟" : "腾讯云"}（${selectedModels.join(", ")}）检测完成`,
+      );
       setTimeout(() => {
-        window.scrollTo({
-          top: document.body.scrollHeight,
-          behavior: "smooth",
-        });
+        window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
       }, 100);
     } catch (error) {
       console.error("Detection error:", error);
-      message.error("检测失败，请重试");
+      message.error(error instanceof Error ? error.message : "检测失败，请重试");
     } finally {
       setLoading(false);
     }
@@ -236,16 +405,23 @@ const UnsafeDetectPage = () => {
     multiple: false,
     customRequest: handleUpload,
     showUploadList: false,
-    accept: "image/*,video/*",
+    accept: "image/*",
   };
 
   const resetDetection = () => {
     setResult(null);
-    setUploadedFile(null);
-    setPreviewUrl("");
-    setUrlInput("");
     setCurrentStep(1);
-    setSelectedModels(["Google-SafeSearch"]); // 重置为默认选项
+    if (contentKind === "video") {
+      setVideoUploadedUrl("");
+      setVideoUrlInput("");
+      setVideoPreviewUrl("");
+      setVideoUploadFileName("");
+    } else {
+      setUploadedFile(null);
+      setPreviewUrl("");
+      setUrlInput("");
+      setSelectedModels(["Google-SafeSearch"]);
+    }
   };
 
   const handleDownloadReport = () => {
@@ -257,7 +433,7 @@ const UnsafeDetectPage = () => {
 ==================
 
 检测时间：${new Date().toLocaleString("zh-CN")}
-文件名称：${uploadedFile?.name || "未知"}
+文件名称：${contentKind === "video" ? videoUploadFileName || "视频" : uploadedFile?.name || "未知"}
 
 检测结果
 --------
@@ -324,325 +500,636 @@ ${result.suggestions.map((s, i) => `${i + 1}. ${s}`).join("\n")}
 
       <Alert
         message="检测范围"
-        description="可识别：暴力血腥、色情低俗、政治敏感、仇恨符号、毒品赌博等多类违规内容。支持图片和视频格式。"
+        description="可识别：暴力血腥、色情低俗、政治敏感、仇恨符号、毒品赌博等多类违规内容。图片支持腾讯云/火山方舟；视频敏感检测使用火山方舟视频理解。"
         type="info"
         showIcon
         style={{ marginBottom: 24 }}
       />
 
-      <Row gutter={24}>
-        <Col xs={24} lg={12}>
-          <Card title="上传检测内容" bordered={false}>
-            <Tabs
-              activeKey={activeTab}
-              onChange={setActiveTab}
-              items={[
-                {
-                  key: "upload",
-                  label: (
-                    <span>
-                      <UploadOutlined /> 本地上传
-                    </span>
-                  ),
-                  children: (
-                    <>
-                      {!uploadedFile && (
-                        <Dragger {...uploadProps} style={{ padding: "40px 20px" }}>
-                          <p className="ant-upload-drag-icon">
-                            <UploadOutlined style={{ fontSize: 48, color: "#1890ff" }} />
-                          </p>
-                          <p className="ant-upload-text" style={{ fontSize: 18 }}>
-                            点击或拖拽文件到此区域上传
-                          </p>
-                          <p className="ant-upload-hint">支持图片（JPG、PNG）或视频（MP4、AVI）格式</p>
-                        </Dragger>
-                      )}
+      <Tabs
+        activeKey={contentKind}
+        onChange={(k) => {
+          setContentKind(k as "image" | "video");
+          setResult(null);
+          setCurrentStep(1);
+          if (k === "video") {
+            setVideoUploadedUrl("");
+            setVideoUrlInput("");
+            setVideoPreviewUrl("");
+            setVideoUploadFileName("");
+          } else {
+            setUploadedFile(null);
+            setPreviewUrl("");
+            setUrlInput("");
+          }
+        }}
+        size="large"
+        style={{ marginBottom: 24 }}
+        items={[
+          {
+            key: "image",
+            label: (
+              <span>
+                <PictureOutlined /> 图片敏感检测
+              </span>
+            ),
+            children: (
+              <Row gutter={24}>
+                <Col xs={24} lg={12}>
+                  <Card title="上传检测内容" bordered={false}>
+                    <Tabs
+                      activeKey={activeTab}
+                      onChange={setActiveTab}
+                      items={[
+                        {
+                          key: "upload",
+                          label: (
+                            <span>
+                              <UploadOutlined /> 本地上传
+                            </span>
+                          ),
+                          children: (
+                            <>
+                              {!uploadedFile && (
+                                <Dragger {...uploadProps} style={{ padding: "40px 20px" }}>
+                                  <p className="ant-upload-drag-icon">
+                                    <UploadOutlined style={{ fontSize: 48, color: "#1890ff" }} />
+                                  </p>
+                                  <p className="ant-upload-text" style={{ fontSize: 18 }}>
+                                    点击或拖拽文件到此区域上传
+                                  </p>
+                                  <p className="ant-upload-hint">支持图片（JPG、PNG 等）</p>
+                                </Dragger>
+                              )}
 
-                      {uploadedFile && previewUrl && activeTab === "upload" && (
-                        <Image
-                          src={previewUrl}
-                          alt="上传的内容"
-                          style={{ width: "100%", borderRadius: 8 }}
-                          preview={false}
-                        />
-                      )}
-                    </>
-                  ),
-                },
-                {
-                  key: "url",
-                  label: (
-                    <span>
-                      <LinkOutlined /> URL解析
-                    </span>
-                  ),
-                  children: (
-                    <>
-                      <Space.Compact style={{ width: "100%", marginBottom: 16 }}>
-                        <Input
-                          size="large"
-                          placeholder="https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=768"
-                          value={urlInput}
-                          onChange={(e) => setUrlInput(e.target.value)}
-                          onPressEnter={handleUrlLoad}
-                          disabled={loading}
-                        />
+                              {uploadedFile && previewUrl && activeTab === "upload" && (
+                                <Image
+                                  src={previewUrl}
+                                  alt="上传的内容"
+                                  style={{ width: "100%", borderRadius: 8 }}
+                                  preview={false}
+                                />
+                              )}
+                            </>
+                          ),
+                        },
+                        {
+                          key: "url",
+                          label: (
+                            <span>
+                              <LinkOutlined /> URL解析
+                            </span>
+                          ),
+                          children: (
+                            <>
+                              <Space.Compact style={{ width: "100%", marginBottom: 16 }}>
+                                <Input
+                                  size="large"
+                                  placeholder="https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=768"
+                                  value={urlInput}
+                                  onChange={(e) => setUrlInput(e.target.value)}
+                                  onPressEnter={handleUrlLoad}
+                                  disabled={loading}
+                                />
+                                <Button
+                                  type="primary"
+                                  size="large"
+                                  onClick={handleUrlLoad}
+                                  loading={loading}
+                                  icon={<LinkOutlined />}
+                                >
+                                  加载
+                                </Button>
+                              </Space.Compact>
+
+                              {uploadedFile && previewUrl && activeTab === "url" && (
+                                <Image
+                                  src={previewUrl}
+                                  alt="URL内容"
+                                  style={{ width: "100%", borderRadius: 8 }}
+                                  preview={false}
+                                />
+                              )}
+                            </>
+                          ),
+                        },
+                      ]}
+                    />
+
+                    {/* 检测方法选择 - 仅在第2步（已上传文件但未检测）时显示 */}
+                    {currentStep === 2 && uploadedFile && !result && (
+                      <Card title="选择检测方法" size="small" style={{ marginTop: 16, backgroundColor: "#f5f5f5" }}>
+                        <Paragraph style={{ marginBottom: 8, fontSize: 13, color: "#666" }}>检测服务</Paragraph>
+                        <Radio.Group
+                          value={detectionProvider}
+                          onChange={(e) => setDetectionProvider(e.target.value)}
+                          style={{ marginBottom: 16 }}
+                        >
+                          <Radio value="tencent">腾讯云内容安全</Radio>
+                          <Radio value="volc">火山方舟图片理解</Radio>
+                        </Radio.Group>
+                        <Paragraph style={{ marginBottom: 12, fontSize: 13, color: "#666" }}>
+                          选择一个或多个检测模型进行综合分析，提高检测准确率
+                        </Paragraph>
+                        <Checkbox.Group
+                          value={selectedModels}
+                          onChange={(checkedValues) => setSelectedModels(checkedValues as string[])}
+                          style={{ width: "100%" }}
+                        >
+                          <Space direction="vertical" style={{ width: "100%" }}>
+                            {SAFETY_DETECTION_MODELS.map((model) => (
+                              <Card key={model.value} size="small" hoverable>
+                                <Checkbox value={model.value} style={{ width: "100%" }}>
+                                  <div>
+                                    <Text strong>{model.label}</Text>
+                                    <br />
+                                    <Text type="secondary" style={{ fontSize: 12 }}>
+                                      {model.description}
+                                    </Text>
+                                  </div>
+                                </Checkbox>
+                              </Card>
+                            ))}
+                          </Space>
+                        </Checkbox.Group>
+                      </Card>
+                    )}
+
+                    <Space direction="vertical" style={{ width: "100%", marginTop: 16 }}>
+                      {contentKind === "image" && currentStep === 2 && !result && (
                         <Button
                           type="primary"
                           size="large"
-                          onClick={handleUrlLoad}
+                          block
+                          icon={<SafetyOutlined />}
+                          onClick={handleDetect}
                           loading={loading}
-                          icon={<LinkOutlined />}
+                          disabled={!uploadedFile || loading || selectedModels.length === 0}
                         >
-                          加载
+                          {loading ? "检测中..." : `使用 ${selectedModels.length} 个模型开始检测`}
                         </Button>
-                      </Space.Compact>
-
-                      {uploadedFile && previewUrl && activeTab === "url" && (
-                        <Image
-                          src={previewUrl}
-                          alt="URL内容"
-                          style={{ width: "100%", borderRadius: 8 }}
-                          preview={false}
-                        />
                       )}
-                    </>
-                  ),
-                },
-              ]}
-            />
+                      {contentKind === "image" && currentStep === 3 && result && (
+                        <Button
+                          type="primary"
+                          size="large"
+                          block
+                          icon={<SafetyOutlined />}
+                          onClick={handleDetect}
+                          loading={loading}
+                          disabled={loading}
+                        >
+                          重新检测
+                        </Button>
+                      )}
+                      <Button block icon={<UploadOutlined />} onClick={resetDetection} disabled={loading}>
+                        重新上传
+                      </Button>
+                    </Space>
+                  </Card>
+                </Col>
 
-            {/* 检测方法选择 - 仅在第2步（已上传文件但未检测）时显示 */}
-            {currentStep === 2 && uploadedFile && !result && (
-              <Card title="选择检测方法" size="small" style={{ marginTop: 16, backgroundColor: "#f5f5f5" }}>
-                <Paragraph style={{ marginBottom: 12, fontSize: 13, color: "#666" }}>
-                  选择一个或多个检测模型进行综合分析，提高检测准确率
-                </Paragraph>
-                <Checkbox.Group
-                  value={selectedModels}
-                  onChange={(checkedValues) => setSelectedModels(checkedValues as string[])}
-                  style={{ width: "100%" }}
-                >
-                  <Space direction="vertical" style={{ width: "100%" }}>
-                    {SAFETY_DETECTION_MODELS.map((model) => (
-                      <Card key={model.value} size="small" hoverable>
-                        <Checkbox value={model.value} style={{ width: "100%" }}>
-                          <div>
-                            <Text strong>{model.label}</Text>
-                            <br />
-                            <Text type="secondary" style={{ fontSize: 12 }}>
-                              {model.description}
-                            </Text>
-                          </div>
-                        </Checkbox>
-                      </Card>
-                    ))}
-                  </Space>
-                </Checkbox.Group>
-              </Card>
-            )}
-
-            <Space direction="vertical" style={{ width: "100%", marginTop: 16 }}>
-              {currentStep === 2 && !result && (
-                <Button
-                  type="primary"
-                  size="large"
-                  block
-                  icon={<SafetyOutlined />}
-                  onClick={handleDetect}
-                  loading={loading}
-                  disabled={!uploadedFile || loading || selectedModels.length === 0}
-                >
-                  {loading ? "检测中..." : `使用 ${selectedModels.length} 个模型开始检测`}
-                </Button>
-              )}
-              {currentStep === 3 && result && (
-                <Button
-                  type="primary"
-                  size="large"
-                  block
-                  icon={<SafetyOutlined />}
-                  onClick={handleDetect}
-                  loading={loading}
-                  disabled={loading}
-                >
-                  重新检测
-                </Button>
-              )}
-              <Button block icon={<UploadOutlined />} onClick={resetDetection} disabled={loading}>
-                重新上传
-              </Button>
-            </Space>
-          </Card>
-        </Col>
-
-        <Col xs={24} lg={12}>
-          <Card title="检测结果" bordered={false}>
-            {!result && !loading && (
-              <div
-                style={{
-                  textAlign: "center",
-                  padding: "80px 20px",
-                  background: "#fafafa",
-                  borderRadius: 8,
-                }}
-              >
-                <SafetyOutlined style={{ fontSize: 64, color: "#d9d9d9", marginBottom: 16 }} />
-                <Paragraph style={{ color: "#999", marginBottom: 8 }}>等待上传文件</Paragraph>
-                <Text type="secondary" style={{ fontSize: 12 }}>
-                  上传后将显示安全检测结果
-                </Text>
-              </div>
-            )}
-
-            {loading && (
-              <div
-                style={{
-                  textAlign: "center",
-                  padding: "80px 20px",
-                  background: "#fafafa",
-                  borderRadius: 8,
-                }}
-              >
-                <Spin size="large" />
-                <Paragraph style={{ marginTop: 16, color: "#666" }}>检测中...</Paragraph>
-              </div>
-            )}
-
-            {result && !loading && (
-              <div>
-                <Alert
-                  message="安全检测已完成"
-                  description={`检测到 ${result.violations.length} 个违规类型，风险等级：${
-                    riskConfig[result.risk].text
-                  }`}
-                  type={result.risk === "low" ? "success" : result.risk === "medium" ? "warning" : "error"}
-                  showIcon
-                  style={{ marginBottom: 16 }}
-                />
-                <Space direction="vertical" size="large" style={{ width: "100%" }}>
-                  <div
-                    style={{
-                      textAlign: "center",
-                      padding: "20px",
-                      background: `${riskConfig[result.risk].color}15`,
-                      borderRadius: 8,
-                    }}
-                  >
-                    <div
-                      style={{
-                        fontSize: 64,
-                        color: riskConfig[result.risk].color,
-                      }}
-                    >
-                      {riskConfig[result.risk].icon}
-                    </div>
-                    <Title
-                      level={3}
-                      style={{
-                        color: riskConfig[result.risk].color,
-                        marginTop: 16,
-                        marginBottom: 8,
-                      }}
-                    >
-                      {riskConfig[result.risk].text}
-                    </Title>
-                    <Text style={{ fontSize: 16 }}>风险评分：{result.riskScore}/100</Text>
-                  </div>
-
-                  {result.violations.length > 0 && (
-                    <>
-                      <Divider />
-                      <div>
-                        <Text strong style={{ fontSize: 16 }}>
-                          检测到的违规类型
+                <Col xs={24} lg={12}>
+                  <Card title="检测结果" bordered={false}>
+                    {!result && !loading && (
+                      <div
+                        style={{
+                          textAlign: "center",
+                          padding: "80px 20px",
+                          background: "#fafafa",
+                          borderRadius: 8,
+                        }}
+                      >
+                        <SafetyOutlined style={{ fontSize: 64, color: "#d9d9d9", marginBottom: 16 }} />
+                        <Paragraph style={{ color: "#999", marginBottom: 8 }}>等待上传文件</Paragraph>
+                        <Text type="secondary" style={{ fontSize: 12 }}>
+                          上传后将显示安全检测结果
                         </Text>
-                        <div style={{ marginTop: 12 }}>
-                          {result.violations.map((violation) => (
-                            <Tag
-                              key={violation}
-                              color="red"
+                      </div>
+                    )}
+
+                    {loading && (
+                      <div
+                        style={{
+                          textAlign: "center",
+                          padding: "80px 20px",
+                          background: "#fafafa",
+                          borderRadius: 8,
+                        }}
+                      >
+                        <Spin size="large" />
+                        <Paragraph style={{ marginTop: 16, color: "#666" }}>检测中...</Paragraph>
+                      </div>
+                    )}
+
+                    {result && !loading && (
+                      <div>
+                        <Alert
+                          message="安全检测已完成"
+                          description={`检测到 ${result.violations.length} 个违规类型，风险等级：${
+                            riskConfig[result.risk].text
+                          }`}
+                          type={result.risk === "low" ? "success" : result.risk === "medium" ? "warning" : "error"}
+                          showIcon
+                          style={{ marginBottom: 16 }}
+                        />
+                        <Space direction="vertical" size="large" style={{ width: "100%" }}>
+                          <div
+                            style={{
+                              textAlign: "center",
+                              padding: "20px",
+                              background: `${riskConfig[result.risk].color}15`,
+                              borderRadius: 8,
+                            }}
+                          >
+                            <div
                               style={{
-                                fontSize: 14,
-                                padding: "4px 12px",
+                                fontSize: 64,
+                                color: riskConfig[result.risk].color,
+                              }}
+                            >
+                              {riskConfig[result.risk].icon}
+                            </div>
+                            <Title
+                              level={3}
+                              style={{
+                                color: riskConfig[result.risk].color,
+                                marginTop: 16,
                                 marginBottom: 8,
                               }}
                             >
-                              {violationLabels[violation] || violation}
-                            </Tag>
-                          ))}
-                        </div>
-                      </div>
+                              {riskConfig[result.risk].text}
+                            </Title>
+                            <Text style={{ fontSize: 16 }}>风险评分：{result.riskScore}/100</Text>
+                          </div>
 
-                      <div>
-                        <Text strong style={{ fontSize: 16 }}>
-                          详细分析
-                        </Text>
-                        <List
-                          style={{ marginTop: 12 }}
-                          size="small"
-                          bordered
-                          dataSource={Object.entries(result.details)}
-                          renderItem={([key, value]) => (
-                            <List.Item>
-                              <Space direction="vertical" style={{ width: "100%" }}>
-                                <div
-                                  style={{
-                                    display: "flex",
-                                    justifyContent: "space-between",
-                                  }}
-                                >
-                                  <Text strong>{violationLabels[key] || key}</Text>
-                                  <Text type="danger">{Math.round(value.score * 100)}%</Text>
+                          {result.violations.length > 0 && (
+                            <>
+                              <Divider />
+                              <div>
+                                <Text strong style={{ fontSize: 16 }}>
+                                  检测到的违规类型
+                                </Text>
+                                <div style={{ marginTop: 12 }}>
+                                  {result.violations.map((violation) => (
+                                    <Tag
+                                      key={violation}
+                                      color="red"
+                                      style={{
+                                        fontSize: 14,
+                                        padding: "4px 12px",
+                                        marginBottom: 8,
+                                      }}
+                                    >
+                                      {violationLabels[violation] || violation}
+                                    </Tag>
+                                  ))}
                                 </div>
-                                {value.regions && value.regions.length > 0 && (
-                                  <Text type="secondary" style={{ fontSize: 12 }}>
-                                    检测到 {value.regions.length} 处可疑区域
-                                  </Text>
-                                )}
-                              </Space>
-                            </List.Item>
-                          )}
-                        />
-                      </div>
-                    </>
-                  )}
+                              </div>
 
-                  {result.suggestions.length > 0 && (
-                    <>
-                      <Divider />
-                      <div>
-                        <Text strong style={{ fontSize: 16 }}>
-                          整改建议
+                              <div>
+                                <Text strong style={{ fontSize: 16 }}>
+                                  详细分析
+                                </Text>
+                                <List
+                                  style={{ marginTop: 12 }}
+                                  size="small"
+                                  bordered
+                                  dataSource={Object.entries(result.details)}
+                                  renderItem={([key, value]) => (
+                                    <List.Item>
+                                      <Space direction="vertical" style={{ width: "100%" }}>
+                                        <div
+                                          style={{
+                                            display: "flex",
+                                            justifyContent: "space-between",
+                                          }}
+                                        >
+                                          <Text strong>{violationLabels[key] || key}</Text>
+                                          <Text type="danger">{Math.round(value.score * 100)}%</Text>
+                                        </div>
+                                        {value.regions && value.regions.length > 0 && (
+                                          <Text type="secondary" style={{ fontSize: 12 }}>
+                                            检测到 {value.regions.length} 处可疑区域
+                                          </Text>
+                                        )}
+                                      </Space>
+                                    </List.Item>
+                                  )}
+                                />
+                              </div>
+                            </>
+                          )}
+
+                          {result.suggestions.length > 0 && (
+                            <>
+                              <Divider />
+                              <div>
+                                <Text strong style={{ fontSize: 16 }}>
+                                  整改建议
+                                </Text>
+                                <List
+                                  style={{ marginTop: 12 }}
+                                  size="small"
+                                  dataSource={result.suggestions}
+                                  renderItem={(item, index) => (
+                                    <List.Item>
+                                      <Space>
+                                        <Tag color="orange">{index + 1}</Tag>
+                                        <Text>{item}</Text>
+                                      </Space>
+                                    </List.Item>
+                                  )}
+                                />
+                              </div>
+                            </>
+                          )}
+
+                          <Space style={{ width: "100%" }} direction="vertical">
+                            <Button type="primary" block icon={<DownloadOutlined />} onClick={handleDownloadReport}>
+                              下载检测报告
+                            </Button>
+                          </Space>
+                        </Space>
+                      </div>
+                    )}
+                  </Card>
+                </Col>
+              </Row>
+            ),
+          },
+          {
+            key: "video",
+            label: (
+              <span>
+                <VideoCameraOutlined /> 视频敏感检测
+              </span>
+            ),
+            children: (
+              <Row gutter={24}>
+                <Col xs={24} lg={12}>
+                  <Card title="上传视频（火山方舟视频理解）" bordered={false}>
+                    <Tabs
+                      activeKey={videoInputTab}
+                      onChange={(k) => setVideoInputTab(k as "upload" | "url")}
+                      items={[
+                        {
+                          key: "upload",
+                          label: (
+                            <span>
+                              <UploadOutlined /> 本地上传
+                            </span>
+                          ),
+                          children: (
+                            <>
+                              {!videoUploadedUrl && !videoFile && (
+                                <Dragger
+                                  accept="video/*"
+                                  customRequest={handleVideoUpload}
+                                  showUploadList={false}
+                                  style={{ padding: "24px 16px", position: "relative" }}
+                                >
+                                  {videoUploading ? (
+                                    <>
+                                      <Spin size="large" />
+                                      <Paragraph style={{ marginTop: 8 }}>正在上传…</Paragraph>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <p className="ant-upload-drag-icon">
+                                        <UploadOutlined style={{ fontSize: 48, color: "#1890ff" }} />
+                                      </p>
+                                      <p className="ant-upload-text">点击或拖拽视频到此区域</p>
+                                      <p className="ant-upload-hint">
+                                        ≤20MB 将用 Base64 直接检测（无需 COS）；更大视频将上传到 COS 后检测
+                                      </p>
+                                    </>
+                                  )}
+                                </Dragger>
+                              )}
+                              {(videoUploadedUrl || videoFile) && videoPreviewUrl && (
+                                <video
+                                  src={videoPreviewUrl}
+                                  controls
+                                  style={{ width: "100%", borderRadius: 8 }}
+                                  title={videoUploadFileName}
+                                />
+                              )}
+                            </>
+                          ),
+                        },
+                        {
+                          key: "url",
+                          label: (
+                            <span>
+                              <LinkOutlined /> 视频 URL
+                            </span>
+                          ),
+                          children: (
+                            <>
+                              <Space.Compact style={{ width: "100%", marginBottom: 16 }}>
+                                <Input
+                                  size="large"
+                                  placeholder="https://example.com/video.mp4"
+                                  value={videoUrlInput}
+                                  onChange={(e) => setVideoUrlInput(e.target.value)}
+                                  onPressEnter={handleVideoUrlLoad}
+                                  disabled={loading}
+                                />
+                                <Button
+                                  type="primary"
+                                  size="large"
+                                  onClick={handleVideoUrlLoad}
+                                  icon={<LinkOutlined />}
+                                >
+                                  加载
+                                </Button>
+                              </Space.Compact>
+                              {(videoUploadedUrl || videoFile) && videoPreviewUrl && videoInputTab === "url" && (
+                                <video src={videoPreviewUrl} controls style={{ width: "100%", borderRadius: 8 }} />
+                              )}
+                            </>
+                          ),
+                        },
+                      ]}
+                    />
+                    <Paragraph type="secondary" style={{ marginTop: 12, fontSize: 12 }}>
+                      使用火山方舟视频理解进行敏感内容检测。本地上传 ≤20MB 可用 Base64 直接检测；更大视频或使用 URL
+                      需公网可访问地址。
+                    </Paragraph>
+                    <Space direction="vertical" style={{ width: "100%", marginTop: 16 }}>
+                      {(currentStep === 2 || videoUploadedUrl || videoFile) && !result && (
+                        <Button
+                          type="primary"
+                          size="large"
+                          block
+                          icon={<SafetyOutlined />}
+                          onClick={handleDetect}
+                          loading={loading}
+                          disabled={(!videoUploadedUrl && !videoFile) || loading}
+                        >
+                          {loading ? "检测中…" : "开始检测"}
+                        </Button>
+                      )}
+                      {currentStep === 3 && result && (
+                        <Button
+                          type="primary"
+                          size="large"
+                          block
+                          icon={<SafetyOutlined />}
+                          onClick={handleDetect}
+                          loading={loading}
+                          disabled={loading}
+                        >
+                          重新检测
+                        </Button>
+                      )}
+                      <Button block icon={<UploadOutlined />} onClick={resetDetection} disabled={loading}>
+                        重新上传
+                      </Button>
+                    </Space>
+                  </Card>
+                </Col>
+                <Col xs={24} lg={12}>
+                  <Card title="检测结果" bordered={false}>
+                    {!result && !loading && (
+                      <div
+                        style={{
+                          textAlign: "center",
+                          padding: "80px 20px",
+                          background: "#fafafa",
+                          borderRadius: 8,
+                        }}
+                      >
+                        <SafetyOutlined style={{ fontSize: 64, color: "#d9d9d9", marginBottom: 16 }} />
+                        <Paragraph style={{ color: "#999", marginBottom: 8 }}>等待上传视频</Paragraph>
+                        <Text type="secondary" style={{ fontSize: 12 }}>
+                          上传或输入视频 URL 后将显示安全检测结果
                         </Text>
-                        <List
-                          style={{ marginTop: 12 }}
-                          size="small"
-                          dataSource={result.suggestions}
-                          renderItem={(item, index) => (
-                            <List.Item>
-                              <Space>
-                                <Tag color="orange">{index + 1}</Tag>
-                                <Text>{item}</Text>
-                              </Space>
-                            </List.Item>
-                          )}
-                        />
                       </div>
-                    </>
-                  )}
-
-                  <Space style={{ width: "100%" }} direction="vertical">
-                    <Button type="primary" block icon={<DownloadOutlined />} onClick={handleDownloadReport}>
-                      下载检测报告
-                    </Button>
-                  </Space>
-                </Space>
-              </div>
-            )}
-          </Card>
-        </Col>
-      </Row>
+                    )}
+                    {loading && (
+                      <div
+                        style={{
+                          textAlign: "center",
+                          padding: "80px 20px",
+                          background: "#fafafa",
+                          borderRadius: 8,
+                        }}
+                      >
+                        <Spin size="large" />
+                        <Paragraph style={{ marginTop: 16, color: "#666" }}>检测中...</Paragraph>
+                      </div>
+                    )}
+                    {result && !loading && (
+                      <div>
+                        <Alert
+                          message="安全检测已完成"
+                          description={`检测到 ${result.violations.length} 个违规类型，风险等级：${riskConfig[result.risk].text}`}
+                          type={result.risk === "low" ? "success" : result.risk === "medium" ? "warning" : "error"}
+                          showIcon
+                          style={{ marginBottom: 16 }}
+                        />
+                        <Space direction="vertical" size="large" style={{ width: "100%" }}>
+                          <div
+                            style={{
+                              textAlign: "center",
+                              padding: "20px",
+                              background: `${riskConfig[result.risk].color}15`,
+                              borderRadius: 8,
+                            }}
+                          >
+                            <div style={{ fontSize: 64, color: riskConfig[result.risk].color }}>
+                              {riskConfig[result.risk].icon}
+                            </div>
+                            <Title
+                              level={3}
+                              style={{ color: riskConfig[result.risk].color, marginTop: 16, marginBottom: 8 }}
+                            >
+                              {riskConfig[result.risk].text}
+                            </Title>
+                            <Text style={{ fontSize: 16 }}>风险评分：{result.riskScore}/100</Text>
+                          </div>
+                          {result.violations.length > 0 && (
+                            <>
+                              <Divider />
+                              <div>
+                                <Text strong style={{ fontSize: 16 }}>
+                                  检测到的违规类型
+                                </Text>
+                                <div style={{ marginTop: 12 }}>
+                                  {result.violations.map((violation) => (
+                                    <Tag
+                                      key={violation}
+                                      color="red"
+                                      style={{ fontSize: 14, padding: "4px 12px", marginBottom: 8 }}
+                                    >
+                                      {violationLabels[violation] || violation}
+                                    </Tag>
+                                  ))}
+                                </div>
+                              </div>
+                              <div>
+                                <Text strong style={{ fontSize: 16 }}>
+                                  详细分析
+                                </Text>
+                                <List
+                                  style={{ marginTop: 12 }}
+                                  size="small"
+                                  bordered
+                                  dataSource={Object.entries(result.details)}
+                                  renderItem={([key, value]) => (
+                                    <List.Item>
+                                      <Space direction="vertical" style={{ width: "100%" }}>
+                                        <div style={{ display: "flex", justifyContent: "space-between" }}>
+                                          <Text strong>{violationLabels[key] || key}</Text>
+                                          <Text type="danger">{Math.round(value.score * 100)}%</Text>
+                                        </div>
+                                      </Space>
+                                    </List.Item>
+                                  )}
+                                />
+                              </div>
+                            </>
+                          )}
+                          {result.suggestions.length > 0 && (
+                            <>
+                              <Divider />
+                              <div>
+                                <Text strong style={{ fontSize: 16 }}>
+                                  整改建议
+                                </Text>
+                                <List
+                                  style={{ marginTop: 12 }}
+                                  size="small"
+                                  dataSource={result.suggestions}
+                                  renderItem={(item, index) => (
+                                    <List.Item>
+                                      <Space>
+                                        <Tag color="orange">{index + 1}</Tag>
+                                        <Text>{item}</Text>
+                                      </Space>
+                                    </List.Item>
+                                  )}
+                                />
+                              </div>
+                            </>
+                          )}
+                          <Space style={{ width: "100%" }} direction="vertical">
+                            <Button type="primary" block icon={<DownloadOutlined />} onClick={handleDownloadReport}>
+                              下载检测报告
+                            </Button>
+                          </Space>
+                        </Space>
+                      </div>
+                    )}
+                  </Card>
+                </Col>
+              </Row>
+            ),
+          },
+        ]}
+      />
     </div>
   );
 };
