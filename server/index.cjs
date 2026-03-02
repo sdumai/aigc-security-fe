@@ -1,26 +1,13 @@
 /**
- * 腾讯云图片/视频内容安全代理：解决浏览器 CORS，密钥仅存服务端
- * 火山方舟：VOLC_ARK_API_KEY、VOLC_ARK_VISION_MODEL（敏感检测）
- * 火山人像融合（人脸替换）：VOLC_ACCESS_KEY、VOLC_SECRET_KEY（视觉开放平台 AK/SK，见控制台）
- * 启动：在项目根目录执行 node server/index.cjs
- * 环境变量：.env.local 中的 TENCENT_SECRET_ID、TENCENT_SECRET_KEY、TENCENT_IMS_BIZTYPE（可选）
- * 视频本地上传：二选一
- *   1) 配置 COS_BUCKET + COS_REGION：本地上传先传到腾讯云 COS，再用 COS 地址做检测（推荐，无需 ngrok）
- *   2) 配置 DETECT_VIDEO_PUBLIC_URL（如 ngrok）：代理暴露公网后腾讯云从该 URL 拉取视频
+ * 检测与生成代理：密钥仅存服务端
+ * 火山方舟：VOLC_ARK_API_KEY、VOLC_ARK_VISION_MODEL（图片/视频理解、AI 生成检测、敏感检测）
+ * 火山人像融合：VOLC_ACCESS_KEY、VOLC_SECRET_KEY
+ * 启动：node server/index.cjs
  */
 require("dotenv").config({ path: ".env.local" });
 const express = require("express");
 const cors = require("cors");
-const multer = require("multer");
-const path = require("path");
-const fs = require("fs");
 
-const TENCENT_SECRET_ID = (process.env.TENCENT_SECRET_ID || process.env.VITE_TENCENT_SECRET_ID || "").trim();
-const TENCENT_SECRET_KEY = (process.env.TENCENT_SECRET_KEY || process.env.VITE_TENCENT_SECRET_KEY || "").trim();
-const TENCENT_IMS_BIZTYPE = (process.env.TENCENT_IMS_BIZTYPE || process.env.VITE_TENCENT_IMS_BIZTYPE || "").trim();
-const DETECT_VIDEO_PUBLIC_URL = (process.env.DETECT_VIDEO_PUBLIC_URL || "").trim();
-const COS_BUCKET = (process.env.COS_BUCKET || "").trim();
-const COS_REGION = (process.env.COS_REGION || "ap-guangzhou").trim();
 const VOLC_ARK_API_KEY = (process.env.VOLC_ARK_API_KEY || process.env.VITE_VOLC_ARK_API_KEY || "").trim();
 const VOLC_ARK_VISION_MODEL = (
   process.env.VOLC_ARK_VISION_MODEL ||
@@ -34,133 +21,6 @@ const app = express();
 app.use(cors());
 app.use(express.json({ limit: "30mb" }));
 
-const uploadDir = path.join(__dirname, "uploads");
-if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
-const uploadIdToPath = new Map();
-const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, uploadDir),
-  filename: (_req, file, cb) => {
-    const id = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}${path.extname(file.originalname) || ".mp4"}`;
-    cb(null, id);
-  },
-});
-const uploadMw = multer({ storage, limits: { fileSize: 500 * 1024 * 1024 } }).single("file");
-
-/** 视频本地上传：若配置了 COS，则上传到腾讯云 COS 并返回 cosInfo（推荐）；否则返回公网 URL（需 DETECT_VIDEO_PUBLIC_URL） */
-app.post("/api/detect/tencent-video-ims/upload", (req, res) => {
-  uploadMw(req, res, async (err) => {
-    if (err) {
-      return res.status(400).json({ error: err.message || "上传失败" });
-    }
-    if (!req.file) {
-      return res.status(400).json({ error: "请选择视频文件" });
-    }
-    const id = req.file.filename;
-    const ext = path.extname(req.file.originalname) || path.extname(id) || ".mp4";
-    const cosKey = `aigc-detect/${new Date().toISOString().slice(0, 10)}/${id}`;
-
-    if (COS_BUCKET && TENCENT_SECRET_ID && TENCENT_SECRET_KEY) {
-      const COS = require("cos-nodejs-sdk-v5");
-      const cos = new COS({
-        SecretId: TENCENT_SECRET_ID,
-        SecretKey: TENCENT_SECRET_KEY,
-      });
-      try {
-        await new Promise((resolve, reject) => {
-          cos.putObject(
-            {
-              Bucket: COS_BUCKET,
-              Region: COS_REGION,
-              Key: cosKey,
-              Body: fs.createReadStream(req.file.path),
-              ContentLength: req.file.size,
-            },
-            (err, data) => {
-              if (err) return reject(err);
-              resolve(data);
-            },
-          );
-        });
-        const url = `https://${COS_BUCKET}.cos.${COS_REGION}.myqcloud.com/${cosKey}`;
-        res.json({
-          url,
-          cosInfo: { Bucket: COS_BUCKET, Region: COS_REGION, Object: cosKey },
-        });
-      } catch (e) {
-        console.error("COS upload error:", e);
-        res.status(500).json({ error: (e && e.message) || "上传到 COS 失败" });
-      } finally {
-        try {
-          fs.unlinkSync(req.file.path);
-        } catch (_) {}
-      }
-      return;
-    }
-
-    const base = DETECT_VIDEO_PUBLIC_URL || `${req.protocol}://${req.get("host")}`;
-    const isLocalhost = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(base.replace(/\/$/, ""));
-    if (isLocalhost) {
-      return res.status(400).json({
-        error:
-          "腾讯云无法访问 localhost。请任选其一：1) 在 .env.local 中配置 COS_BUCKET 和 COS_REGION，本地上传会先传到腾讯云 COS 再检测（推荐）；2) 配置 DETECT_VIDEO_PUBLIC_URL 为代理公网地址（如 ngrok）；3) 改用「视频 URL」填入公网视频链接。",
-      });
-    }
-    uploadIdToPath.set(id, req.file.path);
-    const url = `${base.replace(/\/$/, "")}/api/detect/tencent-video-ims/temp/${encodeURIComponent(id)}`;
-    res.json({ url, id });
-  });
-});
-
-/** 提供已上传视频供腾讯云拉取（需代理暴露到公网时有效） */
-app.get("/api/detect/tencent-video-ims/temp/:id", (req, res) => {
-  const id = decodeURIComponent(req.params.id);
-  const filePath = uploadIdToPath.get(id) || path.join(uploadDir, id);
-  if (!fs.existsSync(filePath)) {
-    return res.status(404).send("Not Found");
-  }
-  res.sendFile(path.resolve(filePath));
-});
-
-app.post("/api/detect/tencent-ims", async (req, res) => {
-  const sendError = (code, message) => {
-    res.status(500).json({ Response: { Error: { Code: code, Message: message } } });
-  };
-  try {
-    if (!TENCENT_SECRET_ID || !TENCENT_SECRET_KEY) {
-      return sendError(
-        "MissingCredential",
-        "请在 .env.local 中配置 TENCENT_SECRET_ID 和 TENCENT_SECRET_KEY（或 VITE_ 前缀）",
-      );
-    }
-
-    const { fileContent, fileUrl, bizType } = req.body || {};
-    if (!fileContent && !fileUrl) {
-      return res.status(400).json({
-        Response: { Error: { Code: "InvalidParameter", Message: "需要 fileContent 或 fileUrl" } },
-      });
-    }
-
-    const tencentcloud = require("tencentcloud-sdk-nodejs");
-    const ImsClient = tencentcloud.ims.v20200713.Client;
-    const client = new ImsClient({
-      credential: { secretId: TENCENT_SECRET_ID, secretKey: TENCENT_SECRET_KEY },
-      region: "ap-guangzhou",
-    });
-
-    const params = {};
-    if (fileContent) params.FileContent = fileContent;
-    if (fileUrl) params.FileUrl = fileUrl;
-    if (bizType || TENCENT_IMS_BIZTYPE) params.BizType = bizType || TENCENT_IMS_BIZTYPE;
-
-    const result = await client.ImageModeration(params);
-    res.json(result);
-  } catch (err) {
-    console.error("Tencent IMS error:", err);
-    const msg = err && err.message ? err.message : String(err);
-    sendError("InternalError", msg);
-  }
-});
-
 /** 火山方舟图片理解：敏感内容检测（Chat 多模态 API）
  * @see https://www.volcengine.com/docs/82379/1362931
  * 需在控制台创建「支持视觉」的模型接入点，将 endpoint_id 配到 VOLC_ARK_VISION_MODEL
@@ -170,16 +30,38 @@ const VOLC_SAFE_PROMPT = `你是一个图片内容安全审核助手。请判断
 仅输出一个 JSON 对象，不要其他文字。格式：{"safe": true或false, "suggestion": "pass或review或block", "labels": ["标签1","标签2"], "reason": "简短原因"}
 若内容安全则 safe 为 true、suggestion 为 pass、labels 为空数组；否则 safe 为 false，suggestion 为 review 或 block，labels 列出违规类型。`;
 
-app.post("/api/detect/volc-ims", async (req, res) => {
+/** 火山方舟图片理解：AI 生成图片检测（多模态 Chat API）
+ * @see https://www.volcengine.com/docs/82379/1362931
+ * 入参：imageUrl 或 imageBase64；返回 isAIGenerated、confidence、reason
+ */
+const VOLC_IMAGE_AIGC_PROMPT = `你是一个图像真伪鉴定助手。请仔细观察该图片，判断其是否为 AI 生成、合成或深度伪造（如 GAN、Diffusion、Deepfake、FaceSwap 等）。
+仅输出一个 JSON 对象，不要其他文字。格式：{"isAIGenerated": true或false, "confidence": 0到1之间的小数, "reason": "简短说明"}
+若判断为真人拍摄/非 AI 生成则 isAIGenerated 为 false，confidence 为可信度；若判断为 AI 生成或合成则 isAIGenerated 为 true，confidence 为置信度。`;
+
+function volcImageChat(imageInput, systemPrompt) {
+  return fetch(VOLC_ARK_CHAT_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${VOLC_ARK_API_KEY}`,
+    },
+    body: JSON.stringify({
+      model: VOLC_ARK_VISION_MODEL,
+      messages: [{ role: "user", content: [imageInput, { type: "text", text: systemPrompt }] }],
+      max_tokens: 512,
+      temperature: 0.1,
+    }),
+  });
+}
+
+app.post("/api/detect/volc-image-aigc", async (req, res) => {
   const sendErr = (msg) => res.status(500).json({ error: msg });
   try {
     if (!VOLC_ARK_API_KEY) {
-      return sendErr("请在 .env.local 中配置 VOLC_ARK_API_KEY 或 VITE_VOLC_ARK_API_KEY");
+      return sendErr("请先配置生成服务密钥（VOLC_ARK_API_KEY）");
     }
     if (!VOLC_ARK_VISION_MODEL) {
-      return sendErr(
-        "请在 .env.local 中配置 VOLC_ARK_VISION_MODEL（火山方舟控制台中「支持视觉」的模型接入点 ID，如 ep-xxx）",
-      );
+      return sendErr("请配置 VOLC_ARK_VISION_MODEL（支持图片理解的模型接入点 ID）");
     }
     const { imageUrl, imageBase64 } = req.body || {};
     let imageInput;
@@ -191,24 +73,44 @@ app.post("/api/detect/volc-ims", async (req, res) => {
     } else {
       return res.status(400).json({ error: "需要 imageUrl 或 imageBase64" });
     }
-    const response = await fetch(VOLC_ARK_CHAT_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${VOLC_ARK_API_KEY}`,
-      },
-      body: JSON.stringify({
-        model: VOLC_ARK_VISION_MODEL,
-        messages: [
-          {
-            role: "user",
-            content: [imageInput, { type: "text", text: VOLC_SAFE_PROMPT }],
-          },
-        ],
-        max_tokens: 512,
-        temperature: 0.1,
-      }),
-    });
+    const response = await volcImageChat(imageInput, VOLC_IMAGE_AIGC_PROMPT);
+    const data = await response.json();
+    if (data.error) {
+      return sendErr(data.error.message || data.error.code || "接口错误");
+    }
+    const text = data.choices?.[0]?.message?.content?.trim() || "";
+    let parsed = { isAIGenerated: false, confidence: 0, reason: "" };
+    try {
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if (jsonMatch) parsed = JSON.parse(jsonMatch[0]);
+    } catch (_) {}
+    res.json(parsed);
+  } catch (err) {
+    console.error("Volc image AIGC error:", err);
+    sendErr(err && err.message ? err.message : "请求失败");
+  }
+});
+
+app.post("/api/detect/volc-ims", async (req, res) => {
+  const sendErr = (msg) => res.status(500).json({ error: msg });
+  try {
+    if (!VOLC_ARK_API_KEY) {
+      return sendErr("请先配置生成服务密钥（VOLC_ARK_API_KEY）");
+    }
+    if (!VOLC_ARK_VISION_MODEL) {
+      return sendErr("请配置 VOLC_ARK_VISION_MODEL（支持视觉的模型接入点 ID）");
+    }
+    const { imageUrl, imageBase64 } = req.body || {};
+    let imageInput;
+    if (imageUrl && typeof imageUrl === "string") {
+      imageInput = { type: "image_url", image_url: { url: imageUrl.trim() } };
+    } else if (imageBase64 && typeof imageBase64 === "string") {
+      const dataUrl = imageBase64.startsWith("data:") ? imageBase64 : `data:image/jpeg;base64,${imageBase64}`;
+      imageInput = { type: "image_url", image_url: { url: dataUrl } };
+    } else {
+      return res.status(400).json({ error: "需要 imageUrl 或 imageBase64" });
+    }
+    const response = await volcImageChat(imageInput, VOLC_SAFE_PROMPT);
     const data = await response.json();
     if (data.error) {
       return sendErr(data.error.message || data.error.code || "火山方舟接口错误");
@@ -288,78 +190,89 @@ app.post("/api/detect/volc-video-ims", async (req, res) => {
   }
 });
 
-const VIDEO_AIGC_BIZTYPE = "aigc_video_detect_100046462053";
+/** 视频 AI 生成检测（火山方舟视频理解）
+ * @see https://www.volcengine.com/docs/82379/1895586 视频理解
+ * 入参：videoUrl 或 videoBase64，与 volc-video-ims 一致
+ * 返回：与前端 Detect/Fake 视频结果结构一致，便于直接 setResult
+ */
+const VOLC_VIDEO_AIGC_PROMPT = `你是一个视频真伪鉴别助手。请观看该视频，判断其是否为 AI 生成、深度伪造、换脸或合成视频（如 Deepfake、FaceSwap、图生视频等）。
+仅输出一个 JSON 对象，不要其他文字。格式：{"is_ai_generated": true或false, "confidence": 0到1之间的小数, "reason": "简短说明"}
+若为真实拍摄/非 AI 合成则 is_ai_generated 为 false、confidence 接近 0；若存在明显 AI 生成痕迹则 is_ai_generated 为 true、confidence 接近 1。`;
 
-/** 视频 AI 生成检测：创建任务并轮询直到完成（最多约 5 分钟） */
-app.post("/api/detect/tencent-video-ims", async (req, res) => {
-  const sendError = (code, message) => {
-    res.status(500).json({ Response: { Error: { Code: code, Message: message } } });
-  };
+app.post("/api/detect/volc-video-aigc", async (req, res) => {
+  const sendErr = (msg) => res.status(500).json({ error: msg });
   try {
-    if (!TENCENT_SECRET_ID || !TENCENT_SECRET_KEY) {
-      return sendError("MissingCredential", "请在 .env.local 中配置 TENCENT_SECRET_ID 和 TENCENT_SECRET_KEY");
+    if (!VOLC_ARK_API_KEY) {
+      return sendErr("请先配置生成服务密钥");
     }
-    const { videoUrl, cosInfo } = req.body || {};
-    let taskInput;
-    if (cosInfo && cosInfo.Bucket && cosInfo.Region && cosInfo.Object) {
-      taskInput = {
-        Type: "COS",
-        BucketInfo: { Bucket: cosInfo.Bucket, Region: cosInfo.Region, Object: cosInfo.Object },
-      };
-    } else if (videoUrl && typeof videoUrl === "string") {
-      taskInput = { Type: "URL", Url: videoUrl.trim() };
-    } else {
-      return res.status(400).json({
-        Response: {
-          Error: { Code: "InvalidParameter", Message: "需要 videoUrl 或 cosInfo（Bucket、Region、Object）" },
-        },
-      });
+    if (!VOLC_ARK_VISION_MODEL) {
+      return sendErr("请配置 VOLC_ARK_VISION_MODEL（支持视频理解的模型接入点 ID）");
     }
-
-    const tencentcloud = require("tencentcloud-sdk-nodejs");
-    const VmClient = tencentcloud.vm.v20210922.Client;
-    const vm = new VmClient({
-      credential: { secretId: TENCENT_SECRET_ID, secretKey: TENCENT_SECRET_KEY },
-      region: "ap-guangzhou",
-    });
-
-    const createRes = await vm.CreateVideoModerationTask({
-      Type: "VIDEO_AIGC",
-      BizType: VIDEO_AIGC_BIZTYPE,
-      Tasks: [{ Input: taskInput }],
-    });
-    const first = createRes.Results && createRes.Results[0];
-    const taskId = first && first.TaskId;
-    if (!taskId) {
-      const errMsg = first && first.Message ? first.Message : "创建视频任务失败，未返回 TaskId";
-      return sendError("InternalError", errMsg);
+    const { videoUrl, videoBase64 } = req.body || {};
+    let videoUrlValue = typeof videoUrl === "string" ? videoUrl.trim() : "";
+    if (!videoUrlValue && typeof videoBase64 === "string" && videoBase64.length > 0) {
+      videoUrlValue = videoBase64.startsWith("data:") ? videoBase64 : `data:video/mp4;base64,${videoBase64}`;
     }
-
-    const maxAttempts = 100;
-    const intervalMs = 3000;
-    for (let i = 0; i < maxAttempts; i++) {
-      const detailRes = await vm.DescribeTaskDetail({ TaskId: taskId });
-      const status = detailRes.Status;
-      if (status === "FINISH") {
-        return res.json(detailRes);
-      }
-      if (status === "ERROR" || status === "CANCELLED") {
-        return res.status(500).json({
-          Response: {
-            Error: {
-              Code: status,
-              Message: detailRes.ErrorDescription || detailRes.ErrorType || status,
-            },
+    if (!videoUrlValue) {
+      return res.status(400).json({ error: "需要 videoUrl（公网可访问）或 videoBase64" });
+    }
+    const videoContentBlock = { type: "video_url", video_url: { url: videoUrlValue } };
+    const response = await fetch(VOLC_ARK_CHAT_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${VOLC_ARK_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: VOLC_ARK_VISION_MODEL,
+        messages: [
+          {
+            role: "user",
+            content: [videoContentBlock, { type: "text", text: VOLC_VIDEO_AIGC_PROMPT }],
           },
-        });
-      }
-      await new Promise((r) => setTimeout(r, intervalMs));
+        ],
+        max_tokens: 512,
+        temperature: 0.1,
+      }),
+    });
+    const data = await response.json();
+    if (data.error) {
+      return sendErr(data.error.message || data.error.code || "视频理解接口错误");
     }
-    return sendError("Timeout", "视频检测超时，请稍后重试");
+    const text = data.choices?.[0]?.message?.content?.trim() || "";
+    let isFake = false;
+    let confidence = 0;
+    let reason = "";
+    try {
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0]);
+        isFake = !!parsed.is_ai_generated;
+        confidence = Math.min(1, Math.max(0, Number(parsed.confidence) || 0));
+        reason = String(parsed.reason || "").trim() || (isFake ? "存在 AI 生成痕迹" : "未发现明显 AI 生成痕迹");
+      }
+    } catch (_) {}
+    const segmentConclusion =
+      confidence < 0.5
+        ? "无 AI 生成痕迹的常规视频"
+        : confidence <= 0.9
+          ? "含 AI 生成，建议人工二次校验"
+          : "大概率为 AI 合成视频";
+    res.json({
+      isFake: isFake || confidence >= 0.5,
+      confidence,
+      model: "视频 AI 生成识别",
+      heatmapUrl: typeof videoUrl === "string" ? videoUrl.trim() : undefined,
+      details: {
+        artifacts: isFake || confidence >= 0.5 ? [segmentConclusion] : [],
+        machineLabel: isFake || confidence >= 0.5 ? "生成内容风险" : "正常",
+        segmentRatio: confidence,
+        segmentConclusion: reason || segmentConclusion,
+      },
+    });
   } catch (err) {
-    console.error("Tencent Video IMS error:", err);
-    const msg = err && err.message ? err.message : String(err);
-    sendError("InternalError", msg);
+    console.error("Volc video AIGC error:", err);
+    sendErr(err && err.message ? err.message : "视频 AI 生成检测失败");
   }
 });
 
@@ -511,39 +424,64 @@ app.post("/api/generate/faceswap", async (req, res) => {
   }
 });
 
-/** SeedEdit 3.0 图生图-指令编辑（属性编辑）
- * 两种接入方式（由前端 provider 选择）：
- * - ark：火山方舟 https://ark.cn-beijing.volces.com，鉴权 Bearer，需配置 VOLC_SEEDEDIT_MODEL=ep-xxx
- * - visual：智能视觉 https://visual.volcengineapi.com（文档 86081/1804561），鉴权 Bearer，可选 VOLC_VISUAL_SEEDEDIT_URL
- */
-const VOLC_ARK_IMAGES_URL = "https://ark.cn-beijing.volces.com/api/v3/images/generations";
+/** 属性编辑：SeedEdit 3.0 智能视觉接口（文档 86081/1804561），鉴权 Bearer，可选 VOLC_VISUAL_SEEDEDIT_URL / VOLC_VISUAL_SEEDEDIT_MODEL */
 const VOLC_VISUAL_IMAGES_URL = (
   process.env.VOLC_VISUAL_SEEDEDIT_URL ||
   process.env.VITE_VOLC_VISUAL_SEEDEDIT_URL ||
   "https://visual.volcengineapi.com/api/v3/images/generations"
 ).trim();
-const VOLC_SEEDEDIT_MODEL = (process.env.VOLC_SEEDEDIT_MODEL || process.env.VITE_VOLC_SEEDEDIT_MODEL || "").trim();
 const VOLC_VISUAL_SEEDEDIT_MODEL = (
   process.env.VOLC_VISUAL_SEEDEDIT_MODEL ||
   process.env.VITE_VOLC_VISUAL_SEEDEDIT_MODEL ||
   "SeedEdit3.0"
 ).trim();
+const VOLC_ARK_BASE = (process.env.VOLC_ARK_BASE || "https://ark.cn-beijing.volces.com/api/v3").trim();
+const VOLC_ARK_I2V_MODEL = (
+  process.env.VOLC_ARK_I2V_MODEL ||
+  process.env.VITE_VOLC_ARK_I2V_MODEL ||
+  "doubao-seedance-1-0-lite-i2v-250428"
+).trim();
+const VOLC_ARK_IMAGE_MODEL = (
+  process.env.VOLC_ARK_IMAGE_MODEL ||
+  process.env.VITE_VOLC_ARK_IMAGE_MODEL ||
+  "doubao-seedream-4-0-250828"
+).trim();
+const VOLC_ARK_T2V_MODEL = (
+  process.env.VOLC_ARK_T2V_MODEL ||
+  process.env.VITE_VOLC_ARK_T2V_MODEL ||
+  "doubao-seedance-1-0-lite-t2v-250428"
+).trim();
 
+/** 轮询方舟视频任务直至完成，返回 videoUrl 或 null（失败/超时由调用方 sendErr） */
+async function pollArkVideoTask(taskId) {
+  const maxAttempts = 120;
+  const pollInterval = 3000;
+  for (let i = 0; i < maxAttempts; i++) {
+    const getRes = await fetch(`${VOLC_ARK_BASE}/contents/generations/tasks/${taskId}`, {
+      headers: { Authorization: `Bearer ${VOLC_ARK_API_KEY}` },
+    });
+    if (!getRes.ok) return null;
+    const taskData = await getRes.json();
+    const status = taskData?.status;
+    if (status === "succeeded") {
+      const videoUrl = taskData?.content?.video_url ?? taskData?.output?.video_url;
+      return videoUrl || null;
+    }
+    if (status === "failed") {
+      return null;
+    }
+    await new Promise((r) => setTimeout(r, pollInterval));
+  }
+  return null;
+}
+
+/** 属性编辑：图生图 3.0 指令编辑 SeedEdit 3.0（仅智能视觉接口，见文档 86081/1804561） */
 app.post("/api/generate/seededit", async (req, res) => {
   const sendErr = (msg) => res.status(500).json({ error: msg });
   try {
-    const { prompt, imageUrl, imageBase64, provider } = req.body || {};
-    const useVisual = String(provider || "ark").toLowerCase() === "visual";
-    const apiUrl = useVisual ? VOLC_VISUAL_IMAGES_URL : VOLC_ARK_IMAGES_URL;
-
+    const { prompt, imageUrl, imageBase64 } = req.body || {};
     if (!VOLC_ARK_API_KEY) {
-      return res.status(400).json({ error: "请在 .env.local 中配置 VOLC_ARK_API_KEY 或 VITE_VOLC_ARK_API_KEY" });
-    }
-    if (!useVisual && !VOLC_SEEDEDIT_MODEL) {
-      return res.status(400).json({
-        error:
-          "方舟方式需配置 VOLC_SEEDEDIT_MODEL 为接入点 ID（ep-xxx）。在火山方舟控制台部署「图生图-指令编辑 SeedEdit 3.0」后获取。",
-      });
+      return res.status(400).json({ error: "请先配置生成服务密钥" });
     }
     const editPrompt = typeof prompt === "string" ? prompt.trim() : "";
     if (!editPrompt) {
@@ -556,9 +494,8 @@ app.post("/api/generate/seededit", async (req, res) => {
     if (!imageInput) {
       return res.status(400).json({ error: "需要 imageUrl 或 imageBase64（待编辑图片）" });
     }
-    const modelValue = useVisual ? VOLC_VISUAL_SEEDEDIT_MODEL : VOLC_SEEDEDIT_MODEL;
     const body = {
-      model: modelValue,
+      model: VOLC_VISUAL_SEEDEDIT_MODEL,
       prompt: editPrompt,
       image: imageInput,
       size: "2k",
@@ -566,7 +503,7 @@ app.post("/api/generate/seededit", async (req, res) => {
       response_format: "url",
       watermark: false,
     };
-    const response = await fetch(apiUrl, {
+    const response = await fetch(VOLC_VISUAL_IMAGES_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -577,39 +514,239 @@ app.post("/api/generate/seededit", async (req, res) => {
     const data = await response.json();
     if (data.error) {
       const msg = data.error.message || data.error.code || "";
-      if (/does not exist|you do not have access|不存在|无权/.test(String(msg)) && !useVisual) {
-        return sendErr(
-          "当前模型/接入点不可用。请在火山方舟控制台部署「图生图-指令编辑 SeedEdit 3.0」，将得到的接入点 ID（ep-xxx）配置到 .env.local 的 VOLC_SEEDEDIT_MODEL。",
-        );
-      }
       return sendErr(msg || "SeedEdit 接口错误");
     }
     const imageUrlOut = data.data && data.data[0] && data.data[0].url;
     if (!imageUrlOut) {
       return sendErr("未返回编辑结果图");
     }
-    res.json({
-      imageUrl: imageUrlOut,
-      message: useVisual ? "属性编辑完成（智能视觉 SeedEdit 3.0）" : "属性编辑完成（火山方舟 SeedEdit 3.0）",
-    });
+    res.json({ imageUrl: imageUrlOut, message: "属性编辑完成。" });
   } catch (err) {
-    console.error("Volc SeedEdit error:", err);
-    sendErr(err && err.message ? err.message : "请求 SeedEdit 失败");
+    console.error("SeedEdit error:", err);
+    sendErr(err && err.message ? err.message : "属性编辑请求失败");
+  }
+});
+
+/** 人脸动画：图生视频 I2V，创建任务后轮询直至完成，返回 videoUrl */
+app.post("/api/generate/fomm", async (req, res) => {
+  const sendErr = (msg) => res.status(500).json({ error: msg });
+  try {
+    const { imageBase64, prompt } = req.body || {};
+    if (!VOLC_ARK_API_KEY) {
+      return res.status(400).json({ error: "请先配置生成服务密钥（VOLC_ARK_API_KEY）" });
+    }
+    const promptText = typeof prompt === "string" ? prompt.trim() : "";
+    const imageInput = typeof imageBase64 === "string" ? imageBase64.trim() : "";
+    if (!imageInput) {
+      return res.status(400).json({ error: "需要 imageBase64（目标人脸图片）" });
+    }
+    const imageDataUrl = imageInput.startsWith("data:") ? imageInput : `data:image/jpeg;base64,${imageInput}`;
+    const content = [
+      { type: "text", text: promptText || "让图中人脸做自然的微笑和轻微点头动作" },
+      { type: "image_url", image_url: { url: imageDataUrl }, role: "reference_image" },
+    ];
+    const createRes = await fetch(`${VOLC_ARK_BASE}/contents/generations/tasks`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${VOLC_ARK_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: VOLC_ARK_I2V_MODEL,
+        content,
+        ratio: "16:9",
+        duration: 5,
+      }),
+    });
+    if (!createRes.ok) {
+      const errData = await createRes.json().catch(() => ({}));
+      return sendErr(errData?.error?.message || `创建任务失败 ${createRes.status}`);
+    }
+    const createData = await createRes.json();
+    const taskId = createData?.id;
+    if (!taskId) {
+      return sendErr("未返回任务 ID");
+    }
+    const maxAttempts = 120;
+    const pollInterval = 3000;
+    for (let i = 0; i < maxAttempts; i++) {
+      const getRes = await fetch(`${VOLC_ARK_BASE}/contents/generations/tasks/${taskId}`, {
+        headers: { Authorization: `Bearer ${VOLC_ARK_API_KEY}` },
+      });
+      if (!getRes.ok) {
+        return sendErr(`查询任务失败 ${getRes.status}`);
+      }
+      const taskData = await getRes.json();
+      const status = taskData?.status;
+      if (status === "succeeded") {
+        const videoUrl = taskData?.content?.video_url ?? taskData?.output?.video_url;
+        if (!videoUrl) {
+          return sendErr("未返回视频地址");
+        }
+        return res.json({ videoUrl, message: "人脸动画视频生成成功。" });
+      }
+      if (status === "failed") {
+        const errMsg = taskData?.error?.message ?? taskData?.message ?? "生成失败";
+        return sendErr(errMsg);
+      }
+      await new Promise((r) => setTimeout(r, pollInterval));
+    }
+    sendErr("生成超时，请稍后重试");
+  } catch (err) {
+    console.error("FOMM/I2V error:", err);
+    sendErr(err && err.message ? err.message : "人脸动画请求失败");
+  }
+});
+
+/** 文生图 */
+app.post("/api/generate/image", async (req, res) => {
+  const sendErr = (msg) => res.status(500).json({ error: msg });
+  try {
+    if (!VOLC_ARK_API_KEY) {
+      return res.status(400).json({ error: "请先配置生成服务密钥" });
+    }
+    const { prompt, size, watermark } = req.body || {};
+    const promptText = typeof prompt === "string" ? prompt.trim() : "";
+    if (!promptText) {
+      return res.status(400).json({ error: "需要 prompt（提示词）" });
+    }
+    const resFetch = await fetch(`${VOLC_ARK_BASE}/images/generations`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${VOLC_ARK_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: VOLC_ARK_IMAGE_MODEL,
+        prompt: promptText,
+        size: size || "2K",
+        n: 1,
+        response_format: "url",
+        watermark: !!watermark,
+      }),
+    });
+    if (!resFetch.ok) {
+      const errData = await resFetch.json().catch(() => ({}));
+      return sendErr(errData?.error?.message || `请求失败 ${resFetch.status}`);
+    }
+    const data = await resFetch.json();
+    const imageUrl = data?.data?.[0]?.url;
+    if (!imageUrl) return sendErr("未返回图片地址");
+    res.json({ imageUrl, message: "图像生成成功！" });
+  } catch (err) {
+    console.error("Image gen error:", err);
+    sendErr(err && err.message ? err.message : "图像生成失败");
+  }
+});
+
+/** 文生视频：创建任务后轮询 */
+app.post("/api/generate/t2v", async (req, res) => {
+  const sendErr = (msg) => res.status(500).json({ error: msg });
+  try {
+    if (!VOLC_ARK_API_KEY) {
+      return res.status(400).json({ error: "请先配置生成服务密钥" });
+    }
+    const { prompt, ratio, duration } = req.body || {};
+    const promptText = typeof prompt === "string" ? prompt.trim() : "";
+    if (!promptText) {
+      return res.status(400).json({ error: "需要 prompt（提示词）" });
+    }
+    const createRes = await fetch(`${VOLC_ARK_BASE}/contents/generations/tasks`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${VOLC_ARK_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: VOLC_ARK_T2V_MODEL,
+        content: [{ type: "text", text: promptText }],
+        ratio: ratio || "16:9",
+        duration: Number(duration) || 5,
+      }),
+    });
+    if (!createRes.ok) {
+      const errData = await createRes.json().catch(() => ({}));
+      return sendErr(errData?.error?.message || `创建任务失败 ${createRes.status}`);
+    }
+    const createData = await createRes.json();
+    const taskId = createData?.id;
+    if (!taskId) return sendErr("未返回任务 ID");
+    const videoUrl = await pollArkVideoTask(taskId);
+    if (!videoUrl) return sendErr("生成失败或超时，请稍后重试");
+    res.json({ videoUrl, message: "视频生成成功！" });
+  } catch (err) {
+    console.error("T2V error:", err);
+    sendErr(err && err.message ? err.message : "文生视频失败");
+  }
+});
+
+/** 图生视频：多图 + 提示词，创建任务后轮询 */
+app.post("/api/generate/i2v", async (req, res) => {
+  const sendErr = (msg) => res.status(500).json({ error: msg });
+  try {
+    if (!VOLC_ARK_API_KEY) {
+      return res.status(400).json({ error: "请先配置生成服务密钥" });
+    }
+    const { prompt, imageBase64List, ratio, duration } = req.body || {};
+    const promptText = typeof prompt === "string" ? prompt.trim() : "";
+    const list = Array.isArray(imageBase64List) ? imageBase64List : [];
+    if (list.length === 0) {
+      return res.status(400).json({ error: "需要至少一张参考图（imageBase64List）" });
+    }
+    const content = [{ type: "text", text: promptText }];
+    for (const b64 of list) {
+      const s = typeof b64 === "string" ? b64.trim() : "";
+      if (!s) continue;
+      const dataUrl = s.startsWith("data:") ? s : `data:image/jpeg;base64,${s}`;
+      content.push({ type: "image_url", image_url: { url: dataUrl }, role: "reference_image" });
+    }
+    if (content.length <= 1) {
+      return res.status(400).json({ error: "需要至少一张有效参考图" });
+    }
+    const createRes = await fetch(`${VOLC_ARK_BASE}/contents/generations/tasks`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${VOLC_ARK_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: VOLC_ARK_I2V_MODEL,
+        content,
+        ratio: ratio || "16:9",
+        duration: Number(duration) || 5,
+      }),
+    });
+    if (!createRes.ok) {
+      const errData = await createRes.json().catch(() => ({}));
+      return sendErr(errData?.error?.message || `创建任务失败 ${createRes.status}`);
+    }
+    const createData = await createRes.json();
+    const taskId = createData?.id;
+    if (!taskId) return sendErr("未返回任务 ID");
+    const videoUrl = await pollArkVideoTask(taskId);
+    if (!videoUrl) return sendErr("生成失败或超时，请稍后重试");
+    res.json({ videoUrl, message: "视频生成成功！" });
+  } catch (err) {
+    console.error("I2V error:", err);
+    sendErr(err && err.message ? err.message : "图生视频失败");
   }
 });
 
 const PORT = process.env.DETECT_PROXY_PORT || 3001;
 app.listen(PORT, () => {
-  console.log(`Tencent IMS proxy: http://localhost:${PORT}/api/detect/tencent-ims`);
-  console.log(`Tencent Video AIGC proxy: http://localhost:${PORT}/api/detect/tencent-video-ims`);
   if (VOLC_ARK_API_KEY && VOLC_ARK_VISION_MODEL) {
     console.log(`Volc Ark 图片敏感检测: http://localhost:${PORT}/api/detect/volc-ims`);
     console.log(`Volc Ark 视频敏感检测: http://localhost:${PORT}/api/detect/volc-video-ims`);
+    console.log(`Volc Ark 视频 AI 生成检测: http://localhost:${PORT}/api/detect/volc-video-aigc`);
   }
   if (VOLC_ACCESS_KEY && VOLC_SECRET_KEY) {
     console.log(`Volc 人像融合(人脸替换): http://localhost:${PORT}/api/generate/faceswap`);
   }
   if (VOLC_ARK_API_KEY) {
     console.log(`Volc SeedEdit(属性编辑): http://localhost:${PORT}/api/generate/seededit`);
+    console.log(`人脸动画(I2V): http://localhost:${PORT}/api/generate/fomm`);
+    console.log(`文生图: http://localhost:${PORT}/api/generate/image`);
+    console.log(`文生视频: http://localhost:${PORT}/api/generate/t2v`);
+    console.log(`图生视频: http://localhost:${PORT}/api/generate/i2v`);
   }
 });

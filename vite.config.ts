@@ -13,12 +13,7 @@ export default defineConfig({
     host: "0.0.0.0",
     port: 5670,
     proxy: {
-      "/api/detect/tencent-ims": { target: "http://localhost:3001", changeOrigin: true },
-      "/api/detect/tencent-video-ims": { target: "http://localhost:3001", changeOrigin: true },
-      "/api/detect/volc-ims": { target: "http://localhost:3001", changeOrigin: true },
-      "/api/detect/volc-video-ims": { target: "http://localhost:3001", changeOrigin: true },
-      "/api/generate/faceswap": { target: "http://localhost:3001", changeOrigin: true },
-      "/api/generate/seededit": { target: "http://localhost:3001", changeOrigin: true },
+      "/api": { target: "http://localhost:3001", changeOrigin: true },
     },
   },
 });

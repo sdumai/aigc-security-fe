@@ -30,13 +30,6 @@ import request from "@/utils/request";
 const { Title, Paragraph } = Typography;
 const { TextArea } = Input;
 
-const VOLC_ARK_API_KEY = (import.meta.env.VITE_VOLC_ARK_API_KEY ?? "").trim();
-const VOLC_ARK_BASE = "https://ark.cn-beijing.volces.com/api/v3";
-const VOLC_ARK_URL = `${VOLC_ARK_BASE}/images/generations`;
-const VOLC_ARK_MODEL = "doubao-seedream-4-0-250828";
-const VOLC_ARK_T2V_MODEL = "doubao-seedance-1-0-lite-t2v-250428";
-const VOLC_ARK_I2V_MODEL = "doubao-seedance-1-0-lite-i2v-250428";
-
 interface ImageResult {
   imageUrl: string;
   message: string;
@@ -49,207 +42,43 @@ interface VideoResult {
 
 const GeneralGeneratePage = () => {
   const navigate = useNavigate();
+
+  // ---------- 文生图 ----------
   const [imageForm] = Form.useForm();
-  const [videoForm] = Form.useForm();
-  const [i2vForm] = Form.useForm();
   const [imageLoading, setImageLoading] = useState(false);
-  const [videoLoading, setVideoLoading] = useState(false);
-  const [i2vLoading, setI2vLoading] = useState(false);
   const [imageResult, setImageResult] = useState<ImageResult | null>(null);
-  const [videoResult, setVideoResult] = useState<VideoResult | null>(null);
-  const [i2vResult, setI2vResult] = useState<VideoResult | null>(null);
-  const [i2vRefImages, setI2vRefImages] = useState<UploadFile[]>([]);
 
   const handleImageGenerate = async () => {
     try {
-      if (!VOLC_ARK_API_KEY) {
-        message.error("请配置 .env.local 中的 VITE_VOLC_ARK_API_KEY");
-        return;
-      }
       const values = await imageForm.validateFields();
       setImageLoading(true);
       setImageResult(null);
-
-      const res = await fetch(VOLC_ARK_URL, {
+      const res = await fetch("/api/generate/image", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${VOLC_ARK_API_KEY}`,
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          model: VOLC_ARK_MODEL,
           prompt: values.prompt,
           size: values.size,
-          n: 1,
-          response_format: "url",
           watermark: !!values.watermark,
         }),
       });
-
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err?.error?.message || `请求失败 ${res.status}`);
-      }
-
       const data = await res.json();
-      const imageUrl = data?.data?.[0]?.url;
-      if (!imageUrl) throw new Error("未返回图片地址");
-
-      setImageResult({
-        imageUrl,
-        message: "图像生成成功！",
-      });
+      if (!res.ok) throw new Error(data.error || "请求失败");
+      setImageResult({ imageUrl: data.imageUrl, message: data.message || "图像生成成功！" });
       message.success("图像生成成功！");
     } catch (error) {
-      console.error("Generate error:", error);
       message.error(error instanceof Error ? error.message : "生成失败，请重试");
     } finally {
       setImageLoading(false);
     }
   };
 
-  /** 轮询视频任务直到完成，返回 videoUrl 或抛错 */
-  const pollVideoTask = async (taskId: string): Promise<string> => {
-    const maxAttempts = 120;
-    const pollInterval = 3000;
-    for (let i = 0; i < maxAttempts; i++) {
-      const getRes = await fetch(`${VOLC_ARK_BASE}/contents/generations/tasks/${taskId}`, {
-        headers: { Authorization: `Bearer ${VOLC_ARK_API_KEY}` },
-      });
-      if (!getRes.ok) throw new Error(`查询任务失败 ${getRes.status}`);
-      const taskData = await getRes.json();
-      const status = taskData?.status;
-      if (status === "succeeded") {
-        const videoUrl = taskData?.content?.video_url ?? taskData?.output?.video_url;
-        if (!videoUrl) throw new Error("未返回视频地址");
-        return videoUrl;
-      }
-      if (status === "failed") {
-        const errMsg = taskData?.error?.message ?? taskData?.message ?? "生成失败";
-        throw new Error(errMsg);
-      }
-      await new Promise((r) => setTimeout(r, pollInterval));
-    }
-    throw new Error("生成超时，请稍后在内容管理中查看");
-  };
-
-  const handleVideoGenerate = async () => {
-    try {
-      if (!VOLC_ARK_API_KEY) {
-        message.error("请配置 .env.local 中的 VITE_VOLC_ARK_API_KEY");
-        return;
-      }
-      const values = await videoForm.validateFields();
-      setVideoLoading(true);
-      setVideoResult(null);
-
-      const createRes = await fetch(`${VOLC_ARK_BASE}/contents/generations/tasks`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${VOLC_ARK_API_KEY}`,
-        },
-        body: JSON.stringify({
-          model: VOLC_ARK_T2V_MODEL,
-          content: [{ type: "text", text: values.prompt }],
-          ratio: values.ratio || "16:9",
-          duration: Number(values.duration) || 5,
-        }),
-      });
-      if (!createRes.ok) {
-        const err = await createRes.json().catch(() => ({}));
-        throw new Error(err?.error?.message || `创建任务失败 ${createRes.status}`);
-      }
-      const createData = await createRes.json();
-      const taskId = createData?.id;
-      if (!taskId) throw new Error("未返回任务 ID");
-
-      const videoUrl = await pollVideoTask(taskId);
-      setVideoResult({ videoUrl, message: "视频生成成功！" });
-      message.success("视频生成成功！");
-    } catch (error) {
-      console.error("Generate error:", error);
-      message.error(error instanceof Error ? error.message : "生成失败，请重试");
-    } finally {
-      setVideoLoading(false);
-    }
-  };
-
-  const handleI2VGenerate = async () => {
-    try {
-      if (!VOLC_ARK_API_KEY) {
-        message.error("请配置 .env.local 中的 VITE_VOLC_ARK_API_KEY");
-        return;
-      }
-      const values = await i2vForm.validateFields();
-      if (!i2vRefImages?.length) {
-        message.error("请上传至少一张参考图");
-        return;
-      }
-      setI2vLoading(true);
-      setI2vResult(null);
-
-      const fileToDataUrl = (file: File): Promise<string> =>
-        new Promise((resolve, reject) => {
-          const r = new FileReader();
-          r.onload = () => resolve(r.result as string);
-          r.onerror = reject;
-          r.readAsDataURL(file);
-        });
-
-      const content: Array<{ type: string; text?: string; image_url?: { url: string }; role?: string }> = [
-        { type: "text", text: values.prompt },
-      ];
-      for (const item of i2vRefImages) {
-        const file = item.originFileObj ?? (item as unknown as File);
-        if (!file || !(file instanceof File)) continue;
-        const url = await fileToDataUrl(file);
-        content.push({ type: "image_url", image_url: { url }, role: "reference_image" });
-      }
-
-      const createRes = await fetch(`${VOLC_ARK_BASE}/contents/generations/tasks`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${VOLC_ARK_API_KEY}`,
-        },
-        body: JSON.stringify({
-          model: VOLC_ARK_I2V_MODEL,
-          content,
-          ratio: values.ratio || "16:9",
-          duration: Number(values.duration) || 5,
-        }),
-      });
-      if (!createRes.ok) {
-        const err = await createRes.json().catch(() => ({}));
-        throw new Error(err?.error?.message || `创建任务失败 ${createRes.status}`);
-      }
-      const createData = await createRes.json();
-      const taskId = createData?.id;
-      if (!taskId) throw new Error("未返回任务 ID");
-
-      const videoUrl = await pollVideoTask(taskId);
-      setI2vResult({ videoUrl, message: "视频生成成功！" });
-      message.success("视频生成成功！");
-    } catch (error) {
-      console.error("I2V error:", error);
-      message.error(error instanceof Error ? error.message : "生成失败，请重试");
-    } finally {
-      setI2vLoading(false);
-    }
-  };
-
   const handleDownloadImage = async () => {
     if (!imageResult?.imageUrl) return;
-
     try {
       message.loading("正在下载图像...", 0);
-
-      // 使用 fetch 获取图片数据
       const response = await fetch(imageResult.imageUrl);
       const blob = await response.blob();
-
-      // 创建 blob URL 并下载
       const blobUrl = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = blobUrl;
@@ -257,87 +86,27 @@ const GeneralGeneratePage = () => {
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-
-      // 清理 blob URL
       URL.revokeObjectURL(blobUrl);
-
       message.destroy();
       message.success("图像下载成功！");
-    } catch (error) {
+    } catch {
       message.destroy();
-      console.error("Download error:", error);
       window.open(imageResult.imageUrl, "_blank");
       message.info("已在新标签页打开图像，请右键保存");
     }
   };
 
   const handleSaveImage = async () => {
+    if (!imageResult?.imageUrl) return;
     try {
       const values = imageForm.getFieldsValue();
       await request.post("/data/save", {
         type: "image",
-        title: `AI 图像生成 - ${values.prompt.substring(0, 20)}...`,
-        url: imageResult?.imageUrl,
+        title: `AI 图像生成 - ${(values.prompt || "").substring(0, 20)}...`,
+        url: imageResult.imageUrl,
       });
-      message.success({
-        content: "图像已保存！可在内容管理中查看",
-        duration: 3,
-      });
-      setTimeout(() => {
-        navigate("/data/output");
-      }, 1500);
-    } catch (error) {
-      console.error("Save error:", error);
-    }
-  };
-
-  const handleDownloadVideo = async () => {
-    if (!videoResult?.videoUrl) return;
-
-    try {
-      message.loading("正在下载视频（可能需要较长时间）...", 0);
-
-      // 使用 fetch 获取视频数据
-      const response = await fetch(videoResult.videoUrl);
-      const blob = await response.blob();
-
-      // 创建 blob URL 并下载
-      const blobUrl = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = blobUrl;
-      link.download = `ai-generated-video-${Date.now()}.mp4`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-
-      // 清理 blob URL
-      URL.revokeObjectURL(blobUrl);
-
-      message.destroy();
-      message.success("视频下载成功！");
-    } catch (error) {
-      message.destroy();
-      console.error("Download error:", error);
-      window.open(videoResult.videoUrl, "_blank");
-      message.info("已在新标签页打开视频，请右键保存");
-    }
-  };
-
-  const handleSaveVideo = async () => {
-    try {
-      const values = videoForm.getFieldsValue();
-      await request.post("/data/save", {
-        type: "video",
-        title: `AI 视频生成 - ${values.prompt.substring(0, 20)}...`,
-        url: videoResult?.videoUrl,
-      });
-      message.success({
-        content: "视频已保存！可在内容管理中查看",
-        duration: 3,
-      });
-      setTimeout(() => {
-        navigate("/data/output");
-      }, 1500);
+      message.success({ content: "图像已保存！可在内容管理中查看", duration: 3 });
+      setTimeout(() => navigate("/data/output"), 1500);
     } catch (error) {
       console.error("Save error:", error);
     }
@@ -349,13 +118,12 @@ const GeneralGeneratePage = () => {
         <Card title="图像生成配置" bordered={false}>
           <Form form={imageForm} layout="vertical" initialValues={{ size: "2K", watermark: true }}>
             <Form.Item label="提示词（Prompt）" name="prompt" rules={[{ required: true, message: "请输入提示词" }]}>
-              <TextArea rows={4} placeholder="请输入提提示词：悲伤的小狗" showCount maxLength={500} />
+              <TextArea rows={4} placeholder="请输入提示词：悲伤的小狗" showCount maxLength={500} />
             </Form.Item>
-
             <Form.Item
               label="图像分辨率"
               name="size"
-              tooltip="指定生成图像的分辨率，可在 prompt 中用自然语言描述图片宽高比、图片形状或图片用途，最终由模型判断生成图片的大小"
+              tooltip="指定生成图像的分辨率"
               rules={[{ required: true, message: "请选择尺寸" }]}
             >
               <Select>
@@ -382,7 +150,6 @@ const GeneralGeneratePage = () => {
           </Form>
         </Card>
       </Col>
-
       <Col xs={24} lg={12}>
         <Card title="生成结果" bordered={false}>
           {imageLoading ? (
@@ -422,6 +189,75 @@ const GeneralGeneratePage = () => {
       </Col>
     </Row>
   );
+
+  // ---------- 文生视频 ----------
+  const [videoForm] = Form.useForm();
+  const [videoLoading, setVideoLoading] = useState(false);
+  const [videoResult, setVideoResult] = useState<VideoResult | null>(null);
+
+  const handleVideoGenerate = async () => {
+    try {
+      const values = await videoForm.validateFields();
+      setVideoLoading(true);
+      setVideoResult(null);
+      const res = await fetch("/api/generate/t2v", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          prompt: values.prompt,
+          ratio: values.ratio,
+          duration: values.duration,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "请求失败");
+      setVideoResult({ videoUrl: data.videoUrl, message: data.message || "视频生成成功！" });
+      message.success("视频生成成功！");
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : "生成失败，请重试");
+    } finally {
+      setVideoLoading(false);
+    }
+  };
+
+  const handleDownloadVideo = async () => {
+    if (!videoResult?.videoUrl) return;
+    try {
+      message.loading("正在下载视频（可能需要较长时间）...", 0);
+      const response = await fetch(videoResult.videoUrl);
+      const blob = await response.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = blobUrl;
+      link.download = `ai-generated-video-${Date.now()}.mp4`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(blobUrl);
+      message.destroy();
+      message.success("视频下载成功！");
+    } catch {
+      message.destroy();
+      window.open(videoResult.videoUrl, "_blank");
+      message.info("已在新标签页打开视频，请右键保存");
+    }
+  };
+
+  const handleSaveVideo = async () => {
+    if (!videoResult?.videoUrl) return;
+    try {
+      const values = videoForm.getFieldsValue();
+      await request.post("/data/save", {
+        type: "video",
+        title: `AI 视频生成 - ${(values.prompt || "").substring(0, 20)}...`,
+        url: videoResult.videoUrl,
+      });
+      message.success({ content: "视频已保存！可在内容管理中查看", duration: 3 });
+      setTimeout(() => navigate("/data/output"), 1500);
+    } catch (error) {
+      console.error("Save error:", error);
+    }
+  };
 
   const videoTab = (
     <Row gutter={24}>
@@ -501,6 +337,68 @@ const GeneralGeneratePage = () => {
     </Row>
   );
 
+  // ---------- 图生视频 ----------
+  const [i2vForm] = Form.useForm();
+  const [i2vLoading, setI2vLoading] = useState(false);
+  const [i2vResult, setI2vResult] = useState<VideoResult | null>(null);
+  const [i2vRefImages, setI2vRefImages] = useState<UploadFile[]>([]);
+
+  const handleI2VGenerate = async () => {
+    try {
+      await i2vForm.validateFields();
+      if (!i2vRefImages?.length) {
+        message.error("请上传至少一张参考图");
+        return;
+      }
+      setI2vLoading(true);
+      setI2vResult(null);
+
+      const fileToBase64 = (file: File): Promise<string> =>
+        new Promise((resolve, reject) => {
+          const r = new FileReader();
+          r.onload = () => {
+            const s = (r.result as string) || "";
+            resolve(s.indexOf(",") >= 0 ? s.split(",")[1] : s);
+          };
+          r.onerror = reject;
+          r.readAsDataURL(file);
+        });
+
+      const imageBase64List: string[] = [];
+      for (const item of i2vRefImages) {
+        const file = item.originFileObj ?? (item as unknown as File);
+        if (file && file instanceof File) {
+          imageBase64List.push(await fileToBase64(file));
+        }
+      }
+      if (imageBase64List.length === 0) {
+        message.error("无法读取参考图，请重新上传");
+        setI2vLoading(false);
+        return;
+      }
+
+      const values = i2vForm.getFieldsValue();
+      const res = await fetch("/api/generate/i2v", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          prompt: values.prompt,
+          imageBase64List,
+          ratio: values.ratio,
+          duration: values.duration,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "请求失败");
+      setI2vResult({ videoUrl: data.videoUrl, message: data.message || "视频生成成功！" });
+      message.success("视频生成成功！");
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : "生成失败，请重试");
+    } finally {
+      setI2vLoading(false);
+    }
+  };
+
   const handleDownloadI2VVideo = async () => {
     if (!i2vResult?.videoUrl) return;
     try {
@@ -525,12 +423,13 @@ const GeneralGeneratePage = () => {
   };
 
   const handleSaveI2VVideo = async () => {
+    if (!i2vResult?.videoUrl) return;
     try {
       const values = i2vForm.getFieldsValue();
       await request.post("/data/save", {
         type: "video",
         title: `AI 图生视频 - ${(values.prompt || "").substring(0, 20)}...`,
-        url: i2vResult?.videoUrl,
+        url: i2vResult.videoUrl,
       });
       message.success({ content: "已保存到内容管理", duration: 3 });
       setTimeout(() => navigate("/data/output"), 1500);
@@ -650,6 +549,7 @@ const GeneralGeneratePage = () => {
     </Row>
   );
 
+  // ---------- 页面 ----------
   return (
     <div className="page-transition">
       <div className="page-header">
@@ -666,9 +566,33 @@ const GeneralGeneratePage = () => {
         defaultActiveKey="image"
         size="large"
         items={[
-          { key: "image", label: "文生图", icon: <PictureOutlined />, children: imageTab },
-          { key: "t2v", label: "文生视频", icon: <VideoCameraOutlined />, children: videoTab },
-          { key: "i2v", label: "图生视频", icon: <VideoCameraOutlined />, children: i2vTab },
+          {
+            key: "image",
+            label: (
+              <span>
+                <PictureOutlined /> 文生图
+              </span>
+            ),
+            children: imageTab,
+          },
+          {
+            key: "t2v",
+            label: (
+              <span>
+                <VideoCameraOutlined /> 文生视频
+              </span>
+            ),
+            children: videoTab,
+          },
+          {
+            key: "i2v",
+            label: (
+              <span>
+                <VideoCameraOutlined /> 图生视频
+              </span>
+            ),
+            children: i2vTab,
+          },
         ]}
       />
     </div>

@@ -17,7 +17,6 @@ import {
   Input,
   Tabs,
   Checkbox,
-  Radio,
 } from "antd";
 import {
   UploadOutlined,
@@ -31,9 +30,6 @@ import {
   VideoCameraOutlined,
 } from "@ant-design/icons";
 import type { UploadFile, UploadProps } from "antd";
-import { imageModerationViaProxy } from "@/utils/tencentIms";
-
-const SENSITIVE_BIZTYPE = (import.meta.env.VITE_TENCENT_IMS_SAFE_BIZTYPE ?? "").trim() || "";
 
 const { Title, Paragraph, Text } = Typography;
 const { Dragger } = Upload;
@@ -102,7 +98,6 @@ const UnsafeDetectPage = () => {
   const [contentKind, setContentKind] = useState<"image" | "video">("image"); // 顶层 Tab：图片敏感检测 | 视频敏感检测
   const [activeTab, setActiveTab] = useState<string>("upload");
   const [selectedModels, setSelectedModels] = useState<string[]>(["Google-SafeSearch"]);
-  const [detectionProvider, setDetectionProvider] = useState<"tencent" | "volc">("volc");
   const [currentStep, setCurrentStep] = useState<number>(1); // 1: 上传, 2: 选择方法, 3: 检测结果
   // 视频 Tab 专用
   const [videoUploadedUrl, setVideoUploadedUrl] = useState<string>("");
@@ -110,9 +105,7 @@ const UnsafeDetectPage = () => {
   const [videoUrlInput, setVideoUrlInput] = useState<string>("");
   const [videoPreviewUrl, setVideoPreviewUrl] = useState<string>("");
   const [videoUploadFileName, setVideoUploadFileName] = useState<string>("");
-  const [videoUploading, setVideoUploading] = useState(false);
   const [videoInputTab, setVideoInputTab] = useState<"upload" | "url">("upload");
-  const VIDEO_BASE64_MAX_BYTES = 20 * 1024 * 1024;
 
   const fileToBase64 = (file: File): Promise<string> =>
     new Promise((resolve, reject) => {
@@ -207,34 +200,16 @@ const UnsafeDetectPage = () => {
     setVideoFile(file);
     setVideoPreviewUrl(URL.createObjectURL(file));
     setVideoUploadFileName(file.name || "视频");
-    setCurrentStep(2);
-    const useBase64 = file.size <= VIDEO_BASE64_MAX_BYTES;
-    if (useBase64) {
-      setVideoUploadedUrl("");
-      message.success("视频已选择，将使用 Base64 直接检测（无需 COS）");
-      return;
-    }
-    setVideoUploading(true);
     setVideoUploadedUrl("");
-    try {
-      const formData = new FormData();
-      formData.append("file", file);
-      const res = await fetch("/api/detect/tencent-video-ims/upload", { method: "POST", body: formData });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "上传失败");
-      setVideoUploadedUrl(data.url);
-      message.success("视频上传成功，可开始检测");
-    } catch (e) {
-      message.error(e instanceof Error ? e.message : "大视频需上传到 COS，请配置 COS 或使用视频 URL");
-    } finally {
-      setVideoUploading(false);
-    }
+    setCurrentStep(2);
+    message.success("视频已选择，将使用 Base64 直接检测");
+    return;
   };
 
   const handleDetect = async () => {
     if (contentKind === "video") {
       const hasUrl = !!videoUploadedUrl;
-      const hasFile = !!videoFile && videoFile.size <= VIDEO_BASE64_MAX_BYTES;
+      const hasFile = !!videoFile;
       if (!hasUrl && !hasFile) {
         message.warning("请先上传视频或输入视频 URL 并加载");
         return;
@@ -254,7 +229,7 @@ const UnsafeDetectPage = () => {
           body: JSON.stringify(body),
         });
         const data = await res.json();
-        if (!res.ok) throw new Error(data.error || "火山方舟视频检测失败");
+        if (!res.ok) throw new Error(data.error || "视频敏感检测失败");
         const safe = data.safe === true;
         const suggestion = (data.suggestion || "pass").toLowerCase();
         const labels: string[] = Array.isArray(data.labels) ? data.labels : [];
@@ -276,7 +251,7 @@ const UnsafeDetectPage = () => {
           details,
         });
         setCurrentStep(3);
-        message.success("火山方舟视频敏感检测完成");
+        message.success("视频敏感检测完成");
         setTimeout(() => window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" }), 100);
       } catch (error) {
         message.error(error instanceof Error ? error.message : "检测失败，请重试");
@@ -301,94 +276,53 @@ const UnsafeDetectPage = () => {
 
       let detectionResult: DetectionResult;
 
-      if (detectionProvider === "volc") {
-        // 火山方舟图片理解
-        const body: { imageUrl?: string; imageBase64?: string } = {};
-        if (activeTab === "url" && urlInput.trim()) {
-          body.imageUrl = urlInput.trim();
-        } else {
-          const rawFile = (uploadedFile as UploadFile).originFileObj ?? (uploadedFile as unknown as File);
-          if (rawFile instanceof File) {
-            body.imageBase64 = await fileToBase64(rawFile);
-          } else {
-            message.error("无法读取图片，请重新上传");
-            setLoading(false);
-            return;
-          }
-        }
-        const res = await fetch("/api/detect/volc-ims", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-        });
-        const data = await res.json();
-        if (!res.ok) {
-          throw new Error(data.error || "火山方舟检测失败");
-        }
-        const safe = data.safe === true;
-        const suggestion = (data.suggestion || "pass").toLowerCase();
-        const labels: string[] = Array.isArray(data.labels) ? data.labels : [];
-        const reason = data.reason || "";
-        const risk: RiskLevel = suggestion === "block" ? "high" : suggestion === "review" ? "medium" : "low";
-        const riskScore = safe ? Math.min(20, 5 + labels.length * 2) : suggestion === "block" ? 80 : 50;
-        const suggestions: string[] = safe
-          ? ["内容安全，可以正常发布", reason || "未检测到违规内容"]
-          : [reason || "建议人工复审", ...labels.map((l: string) => `违规类型：${l}`)];
-        const details: DetectionResult["details"] = {};
-        labels.forEach((l: string) => {
-          details[l] = { score: suggestion === "block" ? 0.9 : 0.6 };
-        });
-        detectionResult = {
-          violations: labels,
-          risk,
-          riskScore,
-          suggestions,
-          details,
-        };
+      // 图片敏感检测：使用多模态图片理解
+      const body: { imageUrl?: string; imageBase64?: string } = {};
+      if (activeTab === "url" && urlInput.trim()) {
+        body.imageUrl = urlInput.trim();
       } else {
-        // 腾讯云内容安全
-        let fileContent: string | undefined;
-        let fileUrl: string | undefined;
-        if (activeTab === "url" && urlInput.trim()) {
-          fileUrl = urlInput.trim();
+        const rawFile = (uploadedFile as UploadFile).originFileObj ?? (uploadedFile as unknown as File);
+        if (rawFile instanceof File) {
+          body.imageBase64 = await fileToBase64(rawFile);
         } else {
-          const rawFile = (uploadedFile as UploadFile).originFileObj ?? (uploadedFile as unknown as File);
-          if (rawFile instanceof File) {
-            fileContent = await fileToBase64(rawFile);
-          } else {
-            message.error("无法读取图片，请重新上传");
-            setLoading(false);
-            return;
-          }
+          message.error("无法读取图片，请重新上传");
+          setLoading(false);
+          return;
         }
-        const tencentRes = await imageModerationViaProxy({
-          ...(fileContent ? { FileContent: fileContent } : {}),
-          ...(fileUrl ? { FileUrl: fileUrl } : {}),
-          ...(SENSITIVE_BIZTYPE ? { BizType: SENSITIVE_BIZTYPE } : {}),
-        });
-        const r = tencentRes.Response;
-        const sug = (r?.Suggestion || "Pass").toLowerCase();
-        const risk: RiskLevel = sug === "block" ? "high" : sug === "review" ? "medium" : "low";
-        const labelResults = r?.LabelResults || [];
-        const violations = labelResults.map((x) => (x.Label || x.Scene || "").toLowerCase()).filter(Boolean);
-        const riskScore = sug === "block" ? 85 : sug === "review" ? 55 : 10;
-        const suggestions: string[] =
-          sug === "pass"
-            ? ["内容安全，可以正常发布", "未检测到违规内容"]
-            : [...violations.map((v) => `检测到：${v}`), "建议人工复审"];
-        const details: DetectionResult["details"] = {};
-        labelResults.forEach((x) => {
-          const key = (x.Label || x.Scene || "").toLowerCase();
-          if (key) details[key] = { score: (x.Score ?? 0) / 100 };
-        });
-        detectionResult = { violations, risk, riskScore, suggestions, details };
       }
+      const res = await fetch("/api/detect/volc-ims", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "图片敏感检测失败");
+      }
+      const safe = data.safe === true;
+      const suggestion = (data.suggestion || "pass").toLowerCase();
+      const labels: string[] = Array.isArray(data.labels) ? data.labels : [];
+      const reason = data.reason || "";
+      const risk: RiskLevel = suggestion === "block" ? "high" : suggestion === "review" ? "medium" : "low";
+      const riskScore = safe ? Math.min(20, 5 + labels.length * 2) : suggestion === "block" ? 80 : 50;
+      const suggestions: string[] = safe
+        ? ["内容安全，可以正常发布", reason || "未检测到违规内容"]
+        : [reason || "建议人工复审", ...labels.map((l: string) => `违规类型：${l}`)];
+      const details: DetectionResult["details"] = {};
+      labels.forEach((l: string) => {
+        details[l] = { score: suggestion === "block" ? 0.9 : 0.6 };
+      });
+      detectionResult = {
+        violations: labels,
+        risk,
+        riskScore,
+        suggestions,
+        details,
+      };
 
       setResult(detectionResult);
       setCurrentStep(3);
-      message.success(
-        `使用 ${detectionProvider === "volc" ? "火山方舟" : "腾讯云"}（${selectedModels.join(", ")}）检测完成`,
-      );
+      message.success(`检测完成（${selectedModels.join(", ")}）`);
       setTimeout(() => {
         window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
       }, 100);
@@ -498,14 +432,6 @@ ${result.suggestions.map((s, i) => `${i + 1}. ${s}`).join("\n")}
         </Paragraph>
       </div>
 
-      <Alert
-        message="检测范围"
-        description="可识别：暴力血腥、色情低俗、政治敏感、仇恨符号、毒品赌博等多类违规内容。图片支持腾讯云/火山方舟；视频敏感检测使用火山方舟视频理解。"
-        type="info"
-        showIcon
-        style={{ marginBottom: 24 }}
-      />
-
       <Tabs
         activeKey={contentKind}
         onChange={(k) => {
@@ -530,7 +456,7 @@ ${result.suggestions.map((s, i) => `${i + 1}. ${s}`).join("\n")}
             key: "image",
             label: (
               <span>
-                <PictureOutlined /> 图片敏感检测
+                <PictureOutlined /> 图片检测
               </span>
             ),
             children: (
@@ -619,17 +545,8 @@ ${result.suggestions.map((s, i) => `${i + 1}. ${s}`).join("\n")}
                     {/* 检测方法选择 - 仅在第2步（已上传文件但未检测）时显示 */}
                     {currentStep === 2 && uploadedFile && !result && (
                       <Card title="选择检测方法" size="small" style={{ marginTop: 16, backgroundColor: "#f5f5f5" }}>
-                        <Paragraph style={{ marginBottom: 8, fontSize: 13, color: "#666" }}>检测服务</Paragraph>
-                        <Radio.Group
-                          value={detectionProvider}
-                          onChange={(e) => setDetectionProvider(e.target.value)}
-                          style={{ marginBottom: 16 }}
-                        >
-                          <Radio value="tencent">腾讯云内容安全</Radio>
-                          <Radio value="volc">火山方舟图片理解</Radio>
-                        </Radio.Group>
                         <Paragraph style={{ marginBottom: 12, fontSize: 13, color: "#666" }}>
-                          选择一个或多个检测模型进行综合分析，提高检测准确率
+                          使用多模态图片理解进行敏感内容检测
                         </Paragraph>
                         <Checkbox.Group
                           value={selectedModels}
@@ -862,13 +779,13 @@ ${result.suggestions.map((s, i) => `${i + 1}. ${s}`).join("\n")}
             key: "video",
             label: (
               <span>
-                <VideoCameraOutlined /> 视频敏感检测
+                <VideoCameraOutlined /> 视频检测
               </span>
             ),
             children: (
               <Row gutter={24}>
                 <Col xs={24} lg={12}>
-                  <Card title="上传视频（火山方舟视频理解）" bordered={false}>
+                  <Card title="上传视频" bordered={false}>
                     <Tabs
                       activeKey={videoInputTab}
                       onChange={(k) => setVideoInputTab(k as "upload" | "url")}
@@ -889,22 +806,11 @@ ${result.suggestions.map((s, i) => `${i + 1}. ${s}`).join("\n")}
                                   showUploadList={false}
                                   style={{ padding: "24px 16px", position: "relative" }}
                                 >
-                                  {videoUploading ? (
-                                    <>
-                                      <Spin size="large" />
-                                      <Paragraph style={{ marginTop: 8 }}>正在上传…</Paragraph>
-                                    </>
-                                  ) : (
-                                    <>
-                                      <p className="ant-upload-drag-icon">
-                                        <UploadOutlined style={{ fontSize: 48, color: "#1890ff" }} />
-                                      </p>
-                                      <p className="ant-upload-text">点击或拖拽视频到此区域</p>
-                                      <p className="ant-upload-hint">
-                                        ≤20MB 将用 Base64 直接检测（无需 COS）；更大视频将上传到 COS 后检测
-                                      </p>
-                                    </>
-                                  )}
+                                  <p className="ant-upload-drag-icon">
+                                    <UploadOutlined style={{ fontSize: 48, color: "#1890ff" }} />
+                                  </p>
+                                  <p className="ant-upload-text">点击或拖拽视频到此区域</p>
+                                  <p className="ant-upload-hint">选择后将使用 Base64 直接检测，建议 ≤20MB</p>
                                 </Dragger>
                               )}
                               {(videoUploadedUrl || videoFile) && videoPreviewUrl && (
@@ -954,8 +860,7 @@ ${result.suggestions.map((s, i) => `${i + 1}. ${s}`).join("\n")}
                       ]}
                     />
                     <Paragraph type="secondary" style={{ marginTop: 12, fontSize: 12 }}>
-                      使用火山方舟视频理解进行敏感内容检测。本地上传 ≤20MB 可用 Base64 直接检测；更大视频或使用 URL
-                      需公网可访问地址。
+                      本地上传使用 Base64 直接检测（建议 ≤20MB）；也可输入视频 URL 后加载检测。
                     </Paragraph>
                     <Space direction="vertical" style={{ width: "100%", marginTop: 16 }}>
                       {(currentStep === 2 || videoUploadedUrl || videoFile) && !result && (

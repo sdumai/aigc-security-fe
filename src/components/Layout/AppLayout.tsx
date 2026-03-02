@@ -8,6 +8,7 @@ import {
   UserOutlined,
   VideoCameraOutlined,
   SafetyOutlined,
+  WarningOutlined,
 } from "@ant-design/icons";
 import type { MenuProps } from "antd";
 
@@ -45,7 +46,7 @@ const menuItems: MenuItem[] = [
     children: [
       {
         key: "/detect/fake",
-        icon: <SafetyOutlined />,
+        icon: <WarningOutlined />,
         label: "虚假内容检测",
       },
       {
