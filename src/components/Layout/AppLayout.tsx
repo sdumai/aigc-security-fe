@@ -1,4 +1,4 @@
-import { Layout, Menu } from "antd";
+import { Layout, Menu, Tooltip } from "antd";
 import { useNavigate, useLocation } from "react-router-dom";
 import {
   HomeOutlined,
@@ -17,49 +17,34 @@ const { Header, Sider, Content } = Layout;
 type MenuItem = Required<MenuProps>["items"][number];
 
 const menuItems: MenuItem[] = [
-  {
-    key: "/",
-    icon: <HomeOutlined />,
-    label: "首页",
-  },
+  { key: "/", icon: <HomeOutlined />, label: "首页" },
   {
     key: "generate",
     icon: <ThunderboltOutlined />,
-    label: "AIGC 生成",
+    label: "生成模块",
     children: [
-      {
-        key: "/generate/deepfake",
-        icon: <UserOutlined />,
-        label: "Deepfake 人脸生成",
-      },
-      {
-        key: "/generate/general",
-        icon: <VideoCameraOutlined />,
-        label: "多模态内容生成",
-      },
+      { key: "/generate/deepfake", icon: <UserOutlined />, label: "Deepfake 人脸生成" },
+      { key: "/generate/general", icon: <VideoCameraOutlined />, label: "多模态内容生成" },
     ],
   },
   {
     key: "detect",
     icon: <ScanOutlined />,
-    label: "AIGC 检测",
+    label: "检测模块",
     children: [
-      {
-        key: "/detect/fake",
-        icon: <WarningOutlined />,
-        label: "虚假内容检测",
-      },
-      {
-        key: "/detect/unsafe",
-        icon: <SafetyOutlined />,
-        label: "敏感内容检测",
-      },
+      { key: "/detect/fake", icon: <WarningOutlined />, label: "虚假内容检测" },
+      { key: "/detect/unsafe", icon: <SafetyOutlined />, label: "敏感内容检测" },
     ],
   },
   {
     key: "/data/output",
     icon: <DatabaseOutlined />,
-    label: "内容管理",
+    label: (
+      <Tooltip title="该模块暂未开放，敬请期待" placement="right">
+        <span>内容管理</span>
+      </Tooltip>
+    ),
+    disabled: true,
   },
 ];
 
@@ -91,14 +76,10 @@ const AppLayout = ({ children }: AppLayoutProps) => {
   return (
     <Layout className="app-layout">
       <Header
+        className="app-header"
         style={{
-          background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
           padding: "0 40px",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          boxShadow: "0 2px 12px rgba(102, 126, 234, 0.3)",
-          height: 64,
+          height: 60,
           position: "sticky",
           top: 0,
           zIndex: 10,
@@ -116,120 +97,51 @@ const AppLayout = ({ children }: AppLayoutProps) => {
         >
           <div
             style={{
-              background: "rgba(255, 255, 255, 0.2)",
-              borderRadius: 10,
-              padding: 10,
+              background: "rgba(255, 255, 255, 0.12)",
+              borderRadius: 8,
+              padding: 8,
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
             }}
           >
-            <SafetyOutlined style={{ fontSize: 24, color: "white" }} />
+            <SafetyOutlined style={{ fontSize: 22, color: "white" }} />
           </div>
           <div>
             <div
               style={{
                 color: "white",
-                fontSize: 18,
-                fontWeight: 700,
-                lineHeight: 1.2,
+                fontSize: 17,
+                fontWeight: 600,
+                lineHeight: 1.25,
+                fontFamily: "var(--font-heading)",
               }}
             >
-              AIGC 安全平台
+              AIGC 安全研究平台
             </div>
             <div
               style={{
-                color: "rgba(255, 255, 255, 0.75)",
+                color: "rgba(255, 255, 255, 0.78)",
                 fontSize: 11,
-                lineHeight: 1.2,
+                lineHeight: 1.25,
                 marginTop: 2,
+                letterSpacing: "0.02em",
               }}
             >
-              AI Generated Content Security
+              AI Generated Content Security Research
             </div>
           </div>
         </div>
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 16,
-            color: "white",
-            flex: "0 0 auto",
-          }}
-        >
-          <div
-            style={{
-              textAlign: "center",
-              padding: "0 12px",
-            }}
-          >
-            <div
-              style={{
-                fontSize: 10,
-                opacity: 0.75,
-                lineHeight: 1.2,
-                marginBottom: 2,
-              }}
-            >
-              AI 生成
-            </div>
-            <div style={{ fontSize: 15, fontWeight: 700, lineHeight: 1.2 }}>5+</div>
-          </div>
-          <div
-            style={{
-              width: 1,
-              height: 28,
-              background: "rgba(255, 255, 255, 0.25)",
-            }}
-          />
-          <div
-            style={{
-              textAlign: "center",
-              padding: "0 12px",
-            }}
-          >
-            <div
-              style={{
-                fontSize: 10,
-                opacity: 0.75,
-                lineHeight: 1.2,
-                marginBottom: 2,
-              }}
-            >
-              准确率
-            </div>
-            <div style={{ fontSize: 15, fontWeight: 700, lineHeight: 1.2 }}>95%+</div>
-          </div>
-          <div
-            style={{
-              width: 1,
-              height: 28,
-              background: "rgba(255, 255, 255, 0.25)",
-            }}
-          />
-          <div
-            style={{
-              textAlign: "center",
-              padding: "0 12px",
-            }}
-          >
-            <div
-              style={{
-                fontSize: 10,
-                opacity: 0.75,
-                lineHeight: 1.2,
-                marginBottom: 2,
-              }}
-            >
-              响应
-            </div>
-            <div style={{ fontSize: 15, fontWeight: 700, lineHeight: 1.2 }}>&lt;2s</div>
-          </div>
+        <div className="app-header-right">
+          <span className="app-header-stat">5+ 模型</span>
+          <span className="app-header-stat-divider" />
+          <span className="app-header-stat">95%+ 准确率</span>
+          <span className="app-header-stat-divider" />
+          <span className="app-header-stat">&lt;2s 响应</span>
         </div>
       </Header>
-      <Layout>
-        <Sider width={250} className="app-sider">
+      <Layout style={{ flex: 1, minHeight: 0 }}>
+        <Sider width={250} className="app-sider" style={{ overflow: "auto" }}>
           <Menu
             mode="inline"
             selectedKeys={getSelectedKeys()}
@@ -239,7 +151,7 @@ const AppLayout = ({ children }: AppLayoutProps) => {
             style={{ height: "100%", borderRight: 0 }}
           />
         </Sider>
-        <Layout style={{ padding: "0 24px 24px" }}>
+        <Layout className="app-content-wrap" style={{ padding: "0 24px 24px" }}>
           <Content className="app-content">{children}</Content>
         </Layout>
       </Layout>

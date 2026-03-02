@@ -28,6 +28,7 @@ import {
   LinkOutlined,
   PictureOutlined,
   VideoCameraOutlined,
+  EyeOutlined,
 } from "@ant-design/icons";
 import type { UploadFile, UploadProps } from "antd";
 
@@ -427,8 +428,7 @@ ${result.suggestions.map((s, i) => `${i + 1}. ${s}`).join("\n")}
           不安全内容检测
         </Title>
         <Paragraph className="page-description">
-          智能识别图片或视频中的不安全内容，包括暴力、色情、仇恨符号等违规元素。
-          提供风险等级评估和整改建议，助力内容安全审核。
+          对图像/视频进行多维度安全审核：识别暴力、色情、仇恨符号等违规内容，输出风险等级与违规类型标签，支持内容安全审核与合规评估。
         </Paragraph>
       </div>
 
@@ -462,7 +462,7 @@ ${result.suggestions.map((s, i) => `${i + 1}. ${s}`).join("\n")}
             children: (
               <Row gutter={24}>
                 <Col xs={24} lg={12}>
-                  <Card title="上传检测内容" bordered={false}>
+                  <Card title="上传待检测内容" bordered={false}>
                     <Tabs
                       activeKey={activeTab}
                       onChange={setActiveTab}
@@ -488,14 +488,23 @@ ${result.suggestions.map((s, i) => `${i + 1}. ${s}`).join("\n")}
                                 </Dragger>
                               )}
 
-                              {uploadedFile && previewUrl && activeTab === "upload" && (
-                                <Image
-                                  src={previewUrl}
-                                  alt="上传的内容"
-                                  style={{ width: "100%", borderRadius: 8 }}
-                                  preview={false}
-                                />
-                              )}
+                              {uploadedFile &&
+                                previewUrl &&
+                                activeTab === "upload" &&
+                                !(currentStep === 2 && !result) && (
+                                  <div className="image-preview-wrap" style={{ borderRadius: 8 }}>
+                                    <Image
+                                      src={previewUrl}
+                                      alt="上传的内容"
+                                      style={{ width: "100%", borderRadius: 8 }}
+                                      preview={{ mask: null }}
+                                    />
+                                    <div className="image-preview-mask">
+                                      <EyeOutlined style={{ fontSize: 24 }} />
+                                      <span>预览</span>
+                                    </div>
+                                  </div>
+                                )}
                             </>
                           ),
                         },
@@ -528,13 +537,19 @@ ${result.suggestions.map((s, i) => `${i + 1}. ${s}`).join("\n")}
                                 </Button>
                               </Space.Compact>
 
-                              {uploadedFile && previewUrl && activeTab === "url" && (
-                                <Image
-                                  src={previewUrl}
-                                  alt="URL内容"
-                                  style={{ width: "100%", borderRadius: 8 }}
-                                  preview={false}
-                                />
+                              {uploadedFile && previewUrl && activeTab === "url" && !(currentStep === 2 && !result) && (
+                                <div className="image-preview-wrap" style={{ borderRadius: 8 }}>
+                                  <Image
+                                    src={previewUrl}
+                                    alt="URL内容"
+                                    style={{ width: "100%", borderRadius: 8 }}
+                                    preview={{ mask: null }}
+                                  />
+                                  <div className="image-preview-mask">
+                                    <EyeOutlined style={{ fontSize: 24 }} />
+                                    <span>预览</span>
+                                  </div>
+                                </div>
                               )}
                             </>
                           ),
@@ -542,67 +557,150 @@ ${result.suggestions.map((s, i) => `${i + 1}. ${s}`).join("\n")}
                       ]}
                     />
 
-                    {/* 检测方法选择 - 仅在第2步（已上传文件但未检测）时显示 */}
-                    {currentStep === 2 && uploadedFile && !result && (
-                      <Card title="选择检测方法" size="small" style={{ marginTop: 16, backgroundColor: "#f5f5f5" }}>
-                        <Paragraph style={{ marginBottom: 12, fontSize: 13, color: "#666" }}>
-                          使用多模态图片理解进行敏感内容检测
-                        </Paragraph>
-                        <Checkbox.Group
-                          value={selectedModels}
-                          onChange={(checkedValues) => setSelectedModels(checkedValues as string[])}
-                          style={{ width: "100%" }}
-                        >
-                          <Space direction="vertical" style={{ width: "100%" }}>
-                            {SAFETY_DETECTION_MODELS.map((model) => (
-                              <Card key={model.value} size="small" hoverable>
-                                <Checkbox value={model.value} style={{ width: "100%" }}>
-                                  <div>
-                                    <Text strong>{model.label}</Text>
-                                    <br />
-                                    <Text type="secondary" style={{ fontSize: 12 }}>
-                                      {model.description}
-                                    </Text>
-                                  </div>
-                                </Checkbox>
-                              </Card>
-                            ))}
+                    {/* 步骤2：两栏布局 - 左侧图片预览+操作，右侧选择检测模型/API（与虚假内容检测一致） */}
+                    {contentKind === "image" && currentStep === 2 && uploadedFile && previewUrl && !result && (
+                      <Row gutter={24} style={{ marginTop: 20 }} align="stretch">
+                        <Col xs={24} md={12}>
+                          <div
+                            style={{
+                              minHeight: 260,
+                              maxHeight: 360,
+                              borderRadius: 12,
+                              overflow: "hidden",
+                              background: "linear-gradient(145deg, #f8f9fa 0%, #f1f3f5 100%)",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              padding: 12,
+                              border: "1px solid #e9ecef",
+                            }}
+                          >
+                            <div className="image-preview-wrap" style={{ maxWidth: "100%", maxHeight: 336 }}>
+                              <Image
+                                src={previewUrl}
+                                alt="待检测图片"
+                                style={{
+                                  maxWidth: "100%",
+                                  maxHeight: 336,
+                                  objectFit: "contain",
+                                  borderRadius: 8,
+                                }}
+                                preview={{ mask: null }}
+                              />
+                              <div className="image-preview-mask">
+                                <EyeOutlined style={{ fontSize: 24 }} />
+                                <span>预览</span>
+                              </div>
+                            </div>
+                          </div>
+                          <Space direction="vertical" style={{ width: "100%", marginTop: 16 }} size={12}>
+                            <Button
+                              type="primary"
+                              size="large"
+                              block
+                              icon={<SafetyOutlined />}
+                              onClick={handleDetect}
+                              loading={loading}
+                              disabled={loading || selectedModels.length === 0}
+                              style={{ height: 44, borderRadius: 8 }}
+                            >
+                              {loading ? "检测中..." : `使用 ${selectedModels.length} 个模型开始检测`}
+                            </Button>
+                            <Button
+                              block
+                              icon={<UploadOutlined />}
+                              onClick={resetDetection}
+                              disabled={loading}
+                              style={{ borderRadius: 8 }}
+                            >
+                              重新上传
+                            </Button>
                           </Space>
-                        </Checkbox.Group>
-                      </Card>
+                        </Col>
+                        <Col xs={24} md={12}>
+                          <Card
+                            title="选择检测模型/API"
+                            size="small"
+                            bordered={false}
+                            style={{
+                              height: "100%",
+                              minHeight: 260,
+                              borderRadius: 12,
+                              background: "#fafbfc",
+                              border: "1px solid #e9ecef",
+                              boxShadow: "0 1px 2px rgba(0,0,0,0.04)",
+                            }}
+                            bodyStyle={{ padding: "16px 20px" }}
+                          >
+                            <Paragraph style={{ marginBottom: 16, fontSize: 13, color: "#5c6b7a" }}>
+                              使用多模态图片理解进行敏感内容检测，选择一个或多个模型综合分析
+                            </Paragraph>
+                            <Checkbox.Group
+                              value={selectedModels}
+                              onChange={(checkedValues) => setSelectedModels(checkedValues as string[])}
+                              style={{ width: "100%" }}
+                            >
+                              <Space direction="vertical" size={12} style={{ width: "100%" }}>
+                                {SAFETY_DETECTION_MODELS.map((model) => (
+                                  <Card
+                                    key={model.value}
+                                    size="small"
+                                    hoverable
+                                    style={{
+                                      marginBottom: 0,
+                                      borderRadius: 8,
+                                      border: "1px solid #e9ecef",
+                                      transition: "border-color 0.2s, box-shadow 0.2s",
+                                    }}
+                                  >
+                                    <Checkbox value={model.value} style={{ width: "100%", alignItems: "flex-start" }}>
+                                      <div style={{ paddingLeft: 4 }}>
+                                        <Text strong style={{ fontSize: 14 }}>
+                                          {model.label}
+                                        </Text>
+                                        <br />
+                                        <Text type="secondary" style={{ fontSize: 12, lineHeight: 1.5 }}>
+                                          {model.description}
+                                        </Text>
+                                      </div>
+                                    </Checkbox>
+                                  </Card>
+                                ))}
+                              </Space>
+                            </Checkbox.Group>
+                          </Card>
+                        </Col>
+                      </Row>
                     )}
 
-                    <Space direction="vertical" style={{ width: "100%", marginTop: 16 }}>
-                      {contentKind === "image" && currentStep === 2 && !result && (
+                    {/* 已有结果或非步骤2时：显示重新检测/重新上传 */}
+                    {!(contentKind === "image" && currentStep === 2 && uploadedFile && !result) && (
+                      <Space direction="vertical" style={{ width: "100%", marginTop: 16 }} size={12}>
+                        {contentKind === "image" && currentStep === 3 && result && (
+                          <Button
+                            type="primary"
+                            size="large"
+                            block
+                            icon={<SafetyOutlined />}
+                            onClick={handleDetect}
+                            loading={loading}
+                            disabled={loading}
+                            style={{ borderRadius: 8 }}
+                          >
+                            重新检测
+                          </Button>
+                        )}
                         <Button
-                          type="primary"
-                          size="large"
                           block
-                          icon={<SafetyOutlined />}
-                          onClick={handleDetect}
-                          loading={loading}
-                          disabled={!uploadedFile || loading || selectedModels.length === 0}
-                        >
-                          {loading ? "检测中..." : `使用 ${selectedModels.length} 个模型开始检测`}
-                        </Button>
-                      )}
-                      {contentKind === "image" && currentStep === 3 && result && (
-                        <Button
-                          type="primary"
-                          size="large"
-                          block
-                          icon={<SafetyOutlined />}
-                          onClick={handleDetect}
-                          loading={loading}
+                          icon={<UploadOutlined />}
+                          onClick={resetDetection}
                           disabled={loading}
+                          style={{ borderRadius: 8 }}
                         >
-                          重新检测
+                          重新上传
                         </Button>
-                      )}
-                      <Button block icon={<UploadOutlined />} onClick={resetDetection} disabled={loading}>
-                        重新上传
-                      </Button>
-                    </Space>
+                      </Space>
+                    )}
                   </Card>
                 </Col>
 
@@ -785,7 +883,7 @@ ${result.suggestions.map((s, i) => `${i + 1}. ${s}`).join("\n")}
             children: (
               <Row gutter={24}>
                 <Col xs={24} lg={12}>
-                  <Card title="上传视频" bordered={false}>
+                  <Card title="上传待检测视频" bordered={false}>
                     <Tabs
                       activeKey={videoInputTab}
                       onChange={(k) => setVideoInputTab(k as "upload" | "url")}

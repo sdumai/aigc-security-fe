@@ -16,6 +16,7 @@ import {
   Space,
   Alert,
   Input,
+  Modal,
 } from "antd";
 import { UploadOutlined, ThunderboltOutlined, DownloadOutlined } from "@ant-design/icons";
 import type { UploadFile } from "antd";
@@ -53,6 +54,23 @@ const DeepfakeGeneratePage = () => {
   const [targetFile, setTargetFile] = useState<UploadFile[]>([]);
   const [sourceFile, setSourceFile] = useState<UploadFile[]>([]);
   const [functionType, setFunctionType] = useState<FunctionType>("faceswap");
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewImageUrl, setPreviewImageUrl] = useState<string>("");
+
+  const handleUploadPreview = async (file: UploadFile) => {
+    let url = file.url ?? file.thumbUrl ?? "";
+    if (!url && file.originFileObj) {
+      url = await new Promise<string>((resolve) => {
+        const r = new FileReader();
+        r.onload = () => resolve(r.result as string);
+        r.readAsDataURL(file.originFileObj as Blob);
+      });
+    }
+    if (url) {
+      setPreviewImageUrl(url);
+      setPreviewOpen(true);
+    }
+  };
 
   const modelOptions: Record<FunctionType, ModelType[]> = {
     faceswap: ["FaceShifter", "SimSwap", "DeepFaceLab", "FaceSwap-GAN"],
@@ -117,13 +135,13 @@ const DeepfakeGeneratePage = () => {
           setLoading(false);
           return;
         }
-        // 接口约定：image_base64=目标图（被换脸的那张），template_base64=模版（要换上去的脸）
+        // 火山引擎人像融合：传参对调后 template=目标图、image=驱动人脸，结果=目标图上换上驱动人脸
         const res = await fetch("/api/generate/faceswap", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            imageBase64: targetBase64,
-            templateBase64: sourceBase64,
+            imageBase64: sourceBase64,
+            templateBase64: targetBase64,
           }),
         });
         const data = await parseJsonResponse(res);
@@ -260,16 +278,17 @@ const DeepfakeGeneratePage = () => {
     <div className="page-transition">
       <div className="page-header">
         <Title level={2} className="page-title">
-          Deepfake 人脸生成
+          深度伪造人脸生成
         </Title>
         <Paragraph className="page-description">
-          提供多种基于人脸图像的深度伪造生成能力。人脸替换：将驱动人脸融合到目标图中，实现换脸；人脸动画：基于单张人脸图与动作描述，生成带表情与动作的短视频（图生视频）；属性编辑：在保持身份不变的前提下，按文本指令修改人脸属性（如发型、肤色等）。以上功能仅供学术研究与深度伪造检测等安全测试使用，请勿用于造假、欺诈等非法用途。
+          提供三类生成能力：人脸替换（将源人脸融合至目标图像）、人脸动画（单张人脸图 + 动作描述 →
+          短视频）、属性编辑（在保持身份一致下按文本修改属性）。本模块仅用于学术研究与深度伪造检测等安全相关用途，禁止用于造假、欺诈等非法场景。
         </Paragraph>
       </div>
 
       <Row gutter={24}>
         <Col xs={24} lg={12}>
-          <Card title="配置参数" bordered={false}>
+          <Card title="生成参数配置" bordered={false}>
             <Form
               form={form}
               layout="vertical"
@@ -278,7 +297,11 @@ const DeepfakeGeneratePage = () => {
                 model: "FaceShifter",
               }}
             >
-              <Form.Item label="上传目标人脸图片" name="target" tooltip="将被替换或编辑的目标人脸">
+              <Form.Item
+                label="上传目标人脸图片"
+                name="target"
+                tooltip="被换脸的那张图（目标图），该图中的人脸将被替换为驱动人脸"
+              >
                 <Upload
                   accept="image/jpeg,image/png,image/jpg"
                   listType="picture-card"
@@ -301,6 +324,7 @@ const DeepfakeGeneratePage = () => {
                     return false;
                   }}
                   onRemove={() => setTargetFile([])}
+                  onPreview={handleUploadPreview}
                 >
                   {targetFile.length === 0 && (
                     <div>
@@ -335,6 +359,7 @@ const DeepfakeGeneratePage = () => {
                       return false;
                     }}
                     onRemove={() => setSourceFile([])}
+                    onPreview={handleUploadPreview}
                   >
                     {sourceFile.length === 0 && (
                       <div>
@@ -414,7 +439,7 @@ const DeepfakeGeneratePage = () => {
         </Col>
 
         <Col xs={24} lg={12}>
-          <Card title="生成结果" bordered={false}>
+          <Card title="生成结果与预览" bordered={false}>
             {loading ? (
               <div style={{ textAlign: "center", padding: "80px 0" }}>
                 <Spin size="large" />
@@ -472,6 +497,18 @@ const DeepfakeGeneratePage = () => {
           </Card>
         </Col>
       </Row>
+
+      <Modal
+        title="预览"
+        open={previewOpen}
+        footer={null}
+        onCancel={() => setPreviewOpen(false)}
+        width="80%"
+        style={{ maxWidth: 800 }}
+        centered
+      >
+        {previewImageUrl && <img src={previewImageUrl} alt="预览" style={{ width: "100%", display: "block" }} />}
+      </Modal>
     </div>
   );
 };

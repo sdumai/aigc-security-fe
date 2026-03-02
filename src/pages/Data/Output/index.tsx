@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Card,
   Row,
@@ -25,10 +26,17 @@ import {
   VideoCameraOutlined,
   FileImageOutlined,
   ClockCircleOutlined,
+  HomeOutlined,
+  ThunderboltOutlined,
+  ScanOutlined,
+  ToolOutlined,
 } from "@ant-design/icons";
 import request from "@/utils/request";
 
 const { Title, Paragraph, Text } = Typography;
+
+/** 内容与记录管理模块是否开放（设为 true 可恢复完整功能） */
+const MODULE_AVAILABLE = false;
 
 interface OutputItem {
   id: string;
@@ -51,6 +59,7 @@ interface DetectionRecord {
 }
 
 const DataOutputPage = () => {
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [outputs, setOutputs] = useState<OutputItem[]>([]);
   const [detections, setDetections] = useState<DetectionRecord[]>([]);
@@ -105,9 +114,7 @@ const DataOutputPage = () => {
   const handleDownload = async () => {
     try {
       const values = await downloadForm.validateFields();
-      message.success(
-        `正在下载 ${selectedItem?.title}，格式：${values.format}`
-      );
+      message.success(`正在下载 ${selectedItem?.title}，格式：${values.format}`);
       setDownloadModalVisible(false);
       downloadForm.resetFields();
     } catch (error) {
@@ -130,18 +137,10 @@ const DataOutputPage = () => {
         </div>
       }
       actions={[
-        <Button
-          type="text"
-          icon={<EyeOutlined />}
-          onClick={() => handlePreview(item)}
-        >
+        <Button type="text" icon={<EyeOutlined />} onClick={() => handlePreview(item)}>
           预览
         </Button>,
-        <Button
-          type="text"
-          icon={<DownloadOutlined />}
-          onClick={() => handleDownloadClick(item)}
-        >
+        <Button type="text" icon={<DownloadOutlined />} onClick={() => handleDownloadClick(item)}>
           下载
         </Button>,
         <Button type="text" icon={<ShareAltOutlined />}>
@@ -203,7 +202,7 @@ const DataOutputPage = () => {
           </div>
         </>
       ) : (
-        <Empty description="暂无生成内容" />
+        <Empty description="暂无生成产物" />
       )}
     </div>
   );
@@ -231,29 +230,14 @@ const DataOutputPage = () => {
                   <Col xs={24} sm={6}>
                     <Text>
                       结果：
-                      <Tag
-                        color={
-                          record.result === "真实" ||
-                          record.result.includes("低")
-                            ? "success"
-                            : "error"
-                        }
-                      >
+                      <Tag color={record.result === "真实" || record.result.includes("低") ? "success" : "error"}>
                         {record.result}
                       </Tag>
                     </Text>
                   </Col>
                   <Col xs={24} sm={6}>
-                    {record.confidence && (
-                      <Text type="secondary">
-                        置信度：{Math.round(record.confidence * 100)}%
-                      </Text>
-                    )}
-                    {record.riskScore && (
-                      <Text type="secondary">
-                        风险：{Math.round(record.riskScore * 100)}%
-                      </Text>
-                    )}
+                    {record.confidence && <Text type="secondary">置信度：{Math.round(record.confidence * 100)}%</Text>}
+                    {record.riskScore && <Text type="secondary">风险：{Math.round(record.riskScore * 100)}%</Text>}
                   </Col>
                   <Col xs={24} sm={4} style={{ textAlign: "right" }}>
                     <Text type="secondary" style={{ fontSize: 12 }}>
@@ -271,15 +255,55 @@ const DataOutputPage = () => {
     </div>
   );
 
+  if (!MODULE_AVAILABLE) {
+    return (
+      <div className="page-transition">
+        <div className="page-header">
+          <Title level={2} className="page-title">
+            内容与记录管理
+          </Title>
+          <Paragraph className="page-description">
+            本模块将支持生成产物与检测记录的集中管理（按类型筛选、预览、下载及元数据导出）。当前功能暂未开放，敬请期待。
+          </Paragraph>
+        </div>
+        <Card bordered={false} style={{ maxWidth: 520, margin: "40px auto", textAlign: "center" }}>
+          <Space direction="vertical" size="large" style={{ width: "100%" }}>
+            <div>
+              <ToolOutlined style={{ fontSize: 56, color: "var(--color-text-muted)" }} />
+            </div>
+            <div>
+              <Title level={4} style={{ marginBottom: 8 }}>
+                功能暂未开放
+              </Title>
+              <Paragraph type="secondary" style={{ marginBottom: 0 }}>
+                内容与记录管理模块正在规划或开发中，暂时无法使用。您可先使用「生成模块」与「检测模块」进行实验。
+              </Paragraph>
+            </div>
+            <Space size="middle">
+              <Button type="primary" icon={<HomeOutlined />} onClick={() => navigate("/")}>
+                返回首页
+              </Button>
+              <Button icon={<ThunderboltOutlined />} onClick={() => navigate("/generate/deepfake")}>
+                生成模块
+              </Button>
+              <Button icon={<ScanOutlined />} onClick={() => navigate("/detect/fake")}>
+                检测模块
+              </Button>
+            </Space>
+          </Space>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div>
       <div className="page-header">
         <Title level={2} className="page-title">
-          数据输出
+          内容与检测记录管理
         </Title>
         <Paragraph className="page-description">
-          集中管理所有生成的内容和检测记录。
-          支持按类型筛选、批量下载，并提供详细的元数据信息。
+          集中管理平台内所有生成产物与检测记录，支持按类型筛选、预览、单条/批量下载及元数据查看与导出。
         </Paragraph>
       </div>
 
@@ -289,7 +313,7 @@ const DataOutputPage = () => {
         items={[
           {
             key: "outputs",
-            label: "生成内容",
+            label: "生成产物",
             icon: <PictureOutlined />,
             children: outputsTab,
           },
@@ -328,11 +352,7 @@ const DataOutputPage = () => {
         {selectedItem?.type === "image" ? (
           <Image src={selectedItem.fullUrl} alt={selectedItem.title} />
         ) : (
-          <video
-            src={selectedItem?.fullUrl}
-            controls
-            style={{ width: "100%", maxHeight: 500 }}
-          >
+          <video src={selectedItem?.fullUrl} controls style={{ width: "100%", maxHeight: 500 }}>
             您的浏览器不支持视频播放
           </video>
         )}
@@ -340,7 +360,7 @@ const DataOutputPage = () => {
 
       {/* 下载配置模态框 */}
       <Modal
-        title="下载设置"
+        title="下载选项"
         open={downloadModalVisible}
         onOk={handleDownload}
         onCancel={() => {
@@ -359,11 +379,7 @@ const DataOutputPage = () => {
             batch: false,
           }}
         >
-          <Form.Item
-            label="文件格式"
-            name="format"
-            rules={[{ required: true, message: "请选择格式" }]}
-          >
+          <Form.Item label="文件格式" name="format" rules={[{ required: true, message: "请选择格式" }]}>
             <Select>
               {selectedItem?.type === "video" ? (
                 <>
@@ -381,11 +397,7 @@ const DataOutputPage = () => {
             </Select>
           </Form.Item>
 
-          <Form.Item
-            label="分辨率"
-            name="resolution"
-            rules={[{ required: true, message: "请选择分辨率" }]}
-          >
+          <Form.Item label="分辨率" name="resolution" rules={[{ required: true, message: "请选择分辨率" }]}>
             <Select>
               <Select.Option value="original">原始分辨率</Select.Option>
               <Select.Option value="720p">720p</Select.Option>

@@ -16,6 +16,7 @@ import {
   Row,
   Col,
   Switch,
+  Modal,
 } from "antd";
 import {
   ThunderboltOutlined,
@@ -115,7 +116,7 @@ const GeneralGeneratePage = () => {
   const imageTab = (
     <Row gutter={24}>
       <Col xs={24} lg={12}>
-        <Card title="图像生成配置" bordered={false}>
+        <Card title="文生图参数" bordered={false}>
           <Form form={imageForm} layout="vertical" initialValues={{ size: "2K", watermark: true }}>
             <Form.Item label="提示词（Prompt）" name="prompt" rules={[{ required: true, message: "请输入提示词" }]}>
               <TextArea rows={4} placeholder="请输入提示词：悲伤的小狗" showCount maxLength={500} />
@@ -262,7 +263,7 @@ const GeneralGeneratePage = () => {
   const videoTab = (
     <Row gutter={24}>
       <Col xs={24} lg={12}>
-        <Card title="文生视频配置" bordered={false}>
+        <Card title="文生视频参数" bordered={false}>
           <Form form={videoForm} layout="vertical" initialValues={{ duration: "5", ratio: "16:9" }}>
             <Form.Item label="提示词（Prompt）" name="prompt" rules={[{ required: true, message: "请输入提示词" }]}>
               <TextArea
@@ -342,6 +343,23 @@ const GeneralGeneratePage = () => {
   const [i2vLoading, setI2vLoading] = useState(false);
   const [i2vResult, setI2vResult] = useState<VideoResult | null>(null);
   const [i2vRefImages, setI2vRefImages] = useState<UploadFile[]>([]);
+  const [uploadPreviewOpen, setUploadPreviewOpen] = useState(false);
+  const [uploadPreviewUrl, setUploadPreviewUrl] = useState("");
+
+  const handleUploadPreview = async (file: UploadFile) => {
+    let url = file.url ?? file.thumbUrl ?? "";
+    if (!url && file.originFileObj) {
+      url = await new Promise<string>((resolve) => {
+        const r = new FileReader();
+        r.onload = () => resolve(r.result as string);
+        r.readAsDataURL(file.originFileObj as Blob);
+      });
+    }
+    if (url) {
+      setUploadPreviewUrl(url);
+      setUploadPreviewOpen(true);
+    }
+  };
 
   const handleI2VGenerate = async () => {
     try {
@@ -441,7 +459,7 @@ const GeneralGeneratePage = () => {
   const i2vTab = (
     <Row gutter={24}>
       <Col xs={24} lg={12}>
-        <Card title="图生视频配置" bordered={false}>
+        <Card title="图生视频参数" bordered={false}>
           <Form form={i2vForm} layout="vertical" initialValues={{ duration: "5", ratio: "16:9" }}>
             <Form.Item
               label="提示词（Prompt）"
@@ -475,6 +493,7 @@ const GeneralGeneratePage = () => {
                   return false;
                 }}
                 onRemove={(file) => setI2vRefImages((prev) => prev.filter((f) => f.uid !== file.uid))}
+                onPreview={handleUploadPreview}
               >
                 {i2vRefImages.length < 4 && (
                   <div>
@@ -557,8 +576,7 @@ const GeneralGeneratePage = () => {
           多模态内容生成
         </Title>
         <Paragraph className="page-description">
-          基于先进的 AI 模型，支持文本到图像、文本到视频的多模态内容生成。
-          只需输入描述性文字，即可生成高质量的图像或视频内容。
+          基于多模态大模型，支持文生图、文生视频、图生视频。输入文本或图像即可生成对应媒体，适用于安全研究、检测数据构建与效果评估。
         </Paragraph>
       </div>
 
@@ -595,6 +613,18 @@ const GeneralGeneratePage = () => {
           },
         ]}
       />
+
+      <Modal
+        title="预览"
+        open={uploadPreviewOpen}
+        footer={null}
+        onCancel={() => setUploadPreviewOpen(false)}
+        width="80%"
+        style={{ maxWidth: 800 }}
+        centered
+      >
+        {uploadPreviewUrl && <img src={uploadPreviewUrl} alt="预览" style={{ width: "100%", display: "block" }} />}
+      </Modal>
     </div>
   );
 };

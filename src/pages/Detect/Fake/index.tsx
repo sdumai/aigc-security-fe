@@ -25,6 +25,7 @@ import {
   ScanOutlined,
   LinkOutlined,
   WarningOutlined,
+  EyeOutlined,
 } from "@ant-design/icons";
 import type { UploadFile, UploadProps } from "antd";
 
@@ -83,7 +84,7 @@ const FakeDetectPage = () => {
     const uploadFile = file as File;
     const isImage = (uploadFile.type || "").startsWith("image/");
     if (!isImage) {
-      message.warning("当前为「AI 图片生成检测」，仅支持图片。请重新选择图片文件（JPG、PNG 等）。");
+      message.warning("当前为「图片 AI 合成检测」，仅支持图片。请选择 JPG、PNG 等图片文件。");
       return;
     }
     try {
@@ -354,11 +355,12 @@ const FakeDetectPage = () => {
     <div className="page-transition">
       <div className="page-header">
         <Title level={2} className="page-title">
-          虚假内容检测
+          合成媒体与深度伪造检测
         </Title>
         <Paragraph className="page-description">
-          使用深度学习技术检测图片或视频是否经过 AI 生成或篡改。 支持识别 Deepfake、FaceSwap
-          等多种伪造手段，提供可疑区域定位和详细分析报告。
+          本页提供两类检测入口：<strong>图片 AI 合成检测</strong>（判定单张图像是否经 AI 生成或篡改，支持
+          Deepfake、FaceSwap 等，输出可疑区域定位与分析报告）、<strong>视频 AI 合成检测</strong>（对视频进行 AI
+          生成/深度伪造判定）。
         </Paragraph>
       </div>
 
@@ -374,9 +376,9 @@ const FakeDetectPage = () => {
             items={[
               {
                 key: "image",
-                label: "AI 图片生成检测",
+                label: "图片 AI 合成检测",
                 children: (
-                  <Card title="上传检测内容" bordered={false}>
+                  <Card title="上传待检测图片" bordered={false}>
                     <Tabs
                       activeKey={activeTab}
                       onChange={setActiveTab}
@@ -396,9 +398,9 @@ const FakeDetectPage = () => {
                                     <UploadOutlined style={{ fontSize: 48, color: "#1890ff" }} />
                                   </p>
                                   <p className="ant-upload-text" style={{ fontSize: 18 }}>
-                                    点击或拖拽文件到此区域上传
+                                    点击或拖拽图片到此区域上传
                                   </p>
-                                  <p className="ant-upload-hint">支持图片（JPG、PNG）或视频（MP4、AVI）格式</p>
+                                  <p className="ant-upload-hint">仅支持图片格式（JPG、PNG）</p>
                                 </Dragger>
                               )}
 
@@ -535,17 +537,23 @@ const FakeDetectPage = () => {
                               border: "1px solid #e9ecef",
                             }}
                           >
-                            <Image
-                              src={previewUrl}
-                              alt="待检测图片"
-                              style={{
-                                maxWidth: "100%",
-                                maxHeight: 336,
-                                objectFit: "contain",
-                                borderRadius: 8,
-                              }}
-                              preview={false}
-                            />
+                            <div className="image-preview-wrap" style={{ maxWidth: "100%", maxHeight: 336 }}>
+                              <Image
+                                src={previewUrl}
+                                alt="待检测图片"
+                                style={{
+                                  maxWidth: "100%",
+                                  maxHeight: 336,
+                                  objectFit: "contain",
+                                  borderRadius: 8,
+                                }}
+                                preview={{ mask: null }}
+                              />
+                              <div className="image-preview-mask">
+                                <EyeOutlined style={{ fontSize: 24 }} />
+                                <span>预览</span>
+                              </div>
+                            </div>
                           </div>
                           <Space direction="vertical" style={{ width: "100%", marginTop: 16 }} size={12}>
                             <Button
@@ -573,7 +581,7 @@ const FakeDetectPage = () => {
                         </Col>
                         <Col xs={24} md={12}>
                           <Card
-                            title="选择检测方法"
+                            title="选择检测模型"
                             size="small"
                             bordered={false}
                             style={{
@@ -662,12 +670,12 @@ const FakeDetectPage = () => {
               },
               {
                 key: "video",
-                label: "AI 视频生成检测",
+                label: "视频 AI 合成检测",
                 children: (
-                  <Card title="上传检测内容" bordered={false}>
+                  <Card title="上传待检测视频" bordered={false}>
                     <Paragraph type="secondary" style={{ marginBottom: 12 }}>
-                      使用多模态视频理解判断是否 AI 生成/深度伪造。支持公网 URL 或选择本地视频（建议 ≤20MB，以 base64
-                      发送）。
+                      对视频进行合成/深度伪造检测，使用多模态视频理解判断是否 AI 生成或篡改。支持公网 URL
+                      或本地上传（建议 ≤20MB）。
                     </Paragraph>
                     <Tabs
                       activeKey={videoInputTab}
@@ -681,6 +689,62 @@ const FakeDetectPage = () => {
                         }
                       }}
                       items={[
+                        {
+                          key: "upload",
+                          label: (
+                            <span>
+                              <UploadOutlined /> 本地上传
+                            </span>
+                          ),
+                          children: (
+                            <>
+                              {!videoFile && (
+                                <Dragger
+                                  name="video"
+                                  multiple={false}
+                                  accept="video/*"
+                                  showUploadList={false}
+                                  customRequest={({ file }) => handleVideoSelect(file as File)}
+                                  disabled={loading}
+                                  style={{ padding: "24px 16px", position: "relative" }}
+                                >
+                                  <p className="ant-upload-drag-icon">
+                                    <UploadOutlined style={{ fontSize: 48, color: "#1890ff" }} />
+                                  </p>
+                                  <p className="ant-upload-text" style={{ fontSize: 16 }}>
+                                    点击或拖拽视频到此区域选择
+                                  </p>
+                                  <p className="ant-upload-hint">≤20MB 将用 Base64 直接检测，无需上传云端</p>
+                                </Dragger>
+                              )}
+                              {videoFile && videoPreviewUrl && (
+                                <>
+                                  <video
+                                    src={videoPreviewUrl}
+                                    controls
+                                    style={{ width: "100%", borderRadius: 8 }}
+                                    title={videoUploadFileName}
+                                  />
+                                </>
+                              )}
+                              <Paragraph type="secondary" style={{ marginTop: 12, marginBottom: 0, fontSize: 12 }}>
+                                本地上传 ≤20MB 将使用 Base64 直接检测；更大视频请使用视频 URL。
+                              </Paragraph>
+                              <Button
+                                type="primary"
+                                size="large"
+                                block
+                                icon={<ScanOutlined />}
+                                onClick={handleVideoDetect}
+                                loading={loading}
+                                disabled={loading || !videoFile}
+                                style={{ marginTop: 16 }}
+                              >
+                                {loading ? "检测中…" : "开始检测"}
+                              </Button>
+                            </>
+                          ),
+                        },
                         {
                           key: "url",
                           label: (
@@ -736,62 +800,6 @@ const FakeDetectPage = () => {
                                   />
                                 </div>
                               )}
-                            </>
-                          ),
-                        },
-                        {
-                          key: "upload",
-                          label: (
-                            <span>
-                              <UploadOutlined /> 本地上传
-                            </span>
-                          ),
-                          children: (
-                            <>
-                              {!videoFile && (
-                                <Dragger
-                                  name="video"
-                                  multiple={false}
-                                  accept="video/*"
-                                  showUploadList={false}
-                                  customRequest={({ file }) => handleVideoSelect(file as File)}
-                                  disabled={loading}
-                                  style={{ padding: "24px 16px", position: "relative" }}
-                                >
-                                  <p className="ant-upload-drag-icon">
-                                    <UploadOutlined style={{ fontSize: 48, color: "#1890ff" }} />
-                                  </p>
-                                  <p className="ant-upload-text" style={{ fontSize: 16 }}>
-                                    点击或拖拽视频到此区域选择
-                                  </p>
-                                  <p className="ant-upload-hint">≤20MB 将用 Base64 直接检测，无需上传云端</p>
-                                </Dragger>
-                              )}
-                              {videoFile && videoPreviewUrl && (
-                                <>
-                                  <video
-                                    src={videoPreviewUrl}
-                                    controls
-                                    style={{ width: "100%", borderRadius: 8 }}
-                                    title={videoUploadFileName}
-                                  />
-                                </>
-                              )}
-                              <Paragraph type="secondary" style={{ marginTop: 12, marginBottom: 0, fontSize: 12 }}>
-                                本地上传 ≤20MB 将使用 Base64 直接检测；更大视频请使用视频 URL。
-                              </Paragraph>
-                              <Button
-                                type="primary"
-                                size="large"
-                                block
-                                icon={<ScanOutlined />}
-                                onClick={handleVideoDetect}
-                                loading={loading}
-                                disabled={loading || !videoFile}
-                                style={{ marginTop: 16 }}
-                              >
-                                {loading ? "检测中…" : "开始检测"}
-                              </Button>
                             </>
                           ),
                         },
@@ -916,7 +924,7 @@ const FakeDetectPage = () => {
                   {result.details.faceRegion && (
                     <Alert
                       message="可疑区域已标注"
-                      description="红色高亮区域显示了可能被篡改或伪造的部分"
+                      description="红色高亮区域为算法判定的可疑篡改/伪造区域，供人工复核参考。"
                       type="warning"
                       showIcon
                     />
