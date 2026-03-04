@@ -330,24 +330,35 @@ function volcSign(params) {
     accessKeyId = "",
     secretAccessKey = "",
     bodySha,
+    host = VOLC_CV_HOST,
+    service = VOLC_CV_SERVICE,
+    region = VOLC_CV_REGION,
+    contentType,
   } = params;
   const datetime = headers["X-Date"] || volcGetXDate();
   const date = datetime.substring(0, 8);
-  const signedHeaderKeys = "host;x-date";
-  const canonicalHeaders = `host:${params.host || VOLC_CV_HOST}\nx-date:${datetime}\n`;
+  const bodyShaHex = bodySha || volcHash("");
+  let signedHeaderKeys, canonicalHeaders;
+  if (contentType && bodySha) {
+    signedHeaderKeys = "content-type;host;x-content-sha256;x-date";
+    canonicalHeaders = `content-type:${contentType}\nhost:${host}\nx-content-sha256:${bodyShaHex}\nx-date:${datetime}\n`;
+  } else {
+    signedHeaderKeys = "host;x-date";
+    canonicalHeaders = `host:${host}\nx-date:${datetime}\n`;
+  }
   const canonicalRequest = [
     method.toUpperCase(),
     pathName,
     volcQueryToString(query) || "",
     canonicalHeaders,
     signedHeaderKeys,
-    bodySha || volcHash(""),
+    bodyShaHex,
   ].join("\n");
-  const credentialScope = [date, VOLC_CV_REGION, VOLC_CV_SERVICE, "request"].join("/");
+  const credentialScope = [date, region, service, "request"].join("/");
   const stringToSign = ["HMAC-SHA256", datetime, credentialScope, volcHash(canonicalRequest)].join("\n");
   const kDate = volcHmac(secretAccessKey, date);
-  const kRegion = volcHmac(kDate, VOLC_CV_REGION);
-  const kService = volcHmac(kRegion, VOLC_CV_SERVICE);
+  const kRegion = volcHmac(kDate, region);
+  const kService = volcHmac(kRegion, service);
   const kSigning = volcHmac(kService, "request");
   const signature = volcHmac(kSigning, stringToSign).toString("hex");
   return [
@@ -424,18 +435,16 @@ app.post("/api/generate/faceswap", async (req, res) => {
   }
 });
 
-/** 属性编辑：SeedEdit 3.0 智能视觉接口（文档 86081/1804561），鉴权 Bearer，可选 VOLC_VISUAL_SEEDEDIT_URL / VOLC_VISUAL_SEEDEDIT_MODEL */
-const VOLC_VISUAL_IMAGES_URL = (
-  process.env.VOLC_VISUAL_SEEDEDIT_URL ||
-  process.env.VITE_VOLC_VISUAL_SEEDEDIT_URL ||
-  "https://visual.volcengineapi.com/api/v3/images/generations"
-).trim();
-const VOLC_VISUAL_SEEDEDIT_MODEL = (
-  process.env.VOLC_VISUAL_SEEDEDIT_MODEL ||
-  process.env.VITE_VOLC_VISUAL_SEEDEDIT_MODEL ||
-  "SeedEdit3.0"
-).trim();
+/** 属性编辑：图生图3.0-指令编辑 SeedEdit 3.0，按通用3.0-文生图/同步转异步接口，visual 网关 Query：Action=CVSync2AsyncSubmitTask, Version=2022-08-31；Header：Region=cn-north-1, Service=cv */
+const VOLC_VISUAL_HOST = "visual.volcengineapi.com";
+const VOLC_VISUAL_SERVICE = "cv";
+const VOLC_VISUAL_REGION = "cn-north-1";
+const SEEDEDIT_VISUAL_ACTION = "CVSync2AsyncSubmitTask";
+const SEEDEDIT_VISUAL_VERSION = "2022-08-31";
+const SEEDEDIT_MODEL = "SeedEdit3.0";
+
 const VOLC_ARK_BASE = (process.env.VOLC_ARK_BASE || "https://ark.cn-beijing.volces.com/api/v3").trim();
+/** 属性编辑仅用 visual + AK/SK，不使用火山方舟 */
 const VOLC_ARK_I2V_MODEL = (
   process.env.VOLC_ARK_I2V_MODEL ||
   process.env.VITE_VOLC_ARK_I2V_MODEL ||
@@ -475,14 +484,68 @@ async function pollArkVideoTask(taskId) {
   return null;
 }
 
-/** 属性编辑：图生图 3.0 指令编辑 SeedEdit 3.0（仅智能视觉接口，见文档 86081/1804561） */
+/** 调用 visual 网关（cv）JSON 请求，鉴权同 SeedEdit，Body 为 application/json */
+async function visualCvRequest(action, bodyObj) {
+  const bodyString = JSON.stringify(bodyObj);
+  const bodySha = volcHash(bodyString);
+  const xDate = volcGetXDate();
+  const pathName = "/";
+  const query = { Action: action, Version: SEEDEDIT_VISUAL_VERSION };
+  const contentType = "application/json";
+  const authorization = volcSign({
+    method: "POST",
+    pathName,
+    query,
+    headers: { "X-Date": xDate },
+    accessKeyId: VOLC_ACCESS_KEY,
+    secretAccessKey: VOLC_SECRET_KEY,
+    bodySha,
+    host: VOLC_VISUAL_HOST,
+    service: VOLC_VISUAL_SERVICE,
+    region: VOLC_VISUAL_REGION,
+    contentType,
+  });
+  const url = `https://${VOLC_VISUAL_HOST}?${volcQueryToString(query)}`;
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": contentType,
+      "X-Date": xDate,
+      "X-Content-Sha256": bodySha,
+      Host: VOLC_VISUAL_HOST,
+      Authorization: authorization,
+    },
+    body: bodyString,
+  });
+  const rawText = await response.text();
+  let data;
+  try {
+    data = JSON.parse(rawText);
+  } catch (e) {
+    return { ok: false, code: 0, message: "响应非 JSON", raw: rawText?.slice(0, 500) };
+  }
+  if (!response.ok) {
+    const msg = data.message || data.ResponseMetadata?.Error?.Message || data.error?.message || rawText?.slice(0, 200);
+    return {
+      ok: false,
+      code: data.code,
+      message: msg,
+      request_id: data.request_id || data.ResponseMetadata?.RequestId,
+    };
+  }
+  return { ok: true, data, code: data.code, message: data.message };
+}
+
+/** 属性编辑：图生图3.0-指令编辑 SeedEdit 3.0，文档：application/json Body，提交任务 + 轮询查询结果 */
 app.post("/api/generate/seededit", async (req, res) => {
   const sendErr = (msg) => res.status(500).json({ error: msg });
   try {
-    const { prompt, imageUrl, imageBase64 } = req.body || {};
-    if (!VOLC_ARK_API_KEY) {
-      return res.status(400).json({ error: "请先配置生成服务密钥" });
+    if (!VOLC_ACCESS_KEY || !VOLC_SECRET_KEY) {
+      return res.status(400).json({
+        error: "请配置 VOLC_ACCESS_KEY 与 VOLC_SECRET_KEY（与人脸融合相同）",
+      });
     }
+    const { prompt, imageUrl, imageBase64 } = req.body || {};
     const editPrompt = typeof prompt === "string" ? prompt.trim() : "";
     if (!editPrompt) {
       return res.status(400).json({ error: "需要 prompt（编辑指令）" });
@@ -494,36 +557,68 @@ app.post("/api/generate/seededit", async (req, res) => {
     if (!imageInput) {
       return res.status(400).json({ error: "需要 imageUrl 或 imageBase64（待编辑图片）" });
     }
-    const body = {
-      model: VOLC_VISUAL_SEEDEDIT_MODEL,
+    const submitBody = {
+      req_key: "seededit_v3.0",
       prompt: editPrompt,
-      image: imageInput,
-      size: "2k",
-      n: 1,
-      response_format: "url",
-      watermark: false,
+      seed: -1,
+      scale: 0.5,
     };
-    const response = await fetch(VOLC_VISUAL_IMAGES_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${VOLC_ARK_API_KEY}`,
-      },
-      body: JSON.stringify(body),
-    });
-    const data = await response.json();
-    if (data.error) {
-      const msg = data.error.message || data.error.code || "";
-      return sendErr(msg || "SeedEdit 接口错误");
+    if (/^https?:\/\//i.test(imageInput)) {
+      submitBody.image_urls = [imageInput];
+    } else {
+      submitBody.binary_data_base64 = [imageInput.replace(/^data:image\/\w+;base64,/, "")];
     }
-    const imageUrlOut = data.data && data.data[0] && data.data[0].url;
-    if (!imageUrlOut) {
-      return sendErr("未返回编辑结果图");
+    const submitRes = await visualCvRequest(SEEDEDIT_VISUAL_ACTION, submitBody);
+    if (!submitRes.ok) {
+      const msg = submitRes.message || "提交任务失败";
+      return sendErr(submitRes.request_id ? `${msg}（request_id: ${submitRes.request_id}）` : msg);
     }
-    res.json({ imageUrl: imageUrlOut, message: "属性编辑完成。" });
+    if (submitRes.code !== 10000) {
+      return sendErr(submitRes.message || `提交失败 code=${submitRes.code}`);
+    }
+    const taskId = submitRes.data?.data?.task_id;
+    if (!taskId) {
+      return sendErr("未返回 task_id");
+    }
+    const maxAttempts = 60;
+    const pollInterval = 2000;
+    for (let i = 0; i < maxAttempts; i++) {
+      const getBody = {
+        req_key: "seededit_v3.0",
+        task_id: taskId,
+        req_json: JSON.stringify({ return_url: true }),
+      };
+      const getRes = await visualCvRequest("CVSync2AsyncGetResult", getBody);
+      if (!getRes.ok) {
+        return sendErr(getRes.message || "查询任务失败");
+      }
+      if (getRes.code !== 10000) {
+        return sendErr(getRes.message || `查询失败 code=${getRes.code}`);
+      }
+      const status = getRes.data?.data?.status;
+      if (status === "done") {
+        const urls = getRes.data?.data?.image_urls;
+        const base64Arr = getRes.data?.data?.binary_data_base64;
+        if (Array.isArray(urls) && urls.length > 0) {
+          return res.json({ imageUrl: urls[0], message: "属性编辑完成。" });
+        }
+        if (Array.isArray(base64Arr) && base64Arr.length > 0) {
+          return res.json({
+            imageUrl: `data:image/jpeg;base64,${base64Arr[0]}`,
+            message: "属性编辑完成。",
+          });
+        }
+        return sendErr("任务完成但未返回图片");
+      }
+      if (status === "not_found" || status === "expired") {
+        return sendErr(status === "expired" ? "任务已过期，请重新提交" : "任务未找到");
+      }
+      await new Promise((r) => setTimeout(r, pollInterval));
+    }
+    return sendErr("生成超时，请稍后重试");
   } catch (err) {
     console.error("SeedEdit error:", err);
-    sendErr(err && err.message ? err.message : "属性编辑请求失败");
+    return sendErr(err && err.message ? err.message : "属性编辑请求失败");
   }
 });
 
