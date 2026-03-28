@@ -91,6 +91,59 @@ app.post("/api/detect/volc-image-aigc", async (req, res) => {
   }
 });
 
+/**
+ * UniversalFakeDetect 单图检测：转发到本机 uvicorn（默认 8008）。
+ * 入参：imageUrl 或 imageBase64（与现有前端字段一致），转发为 image_url / image_base64。
+ * 成功/失败均尽量原样返回上游 JSON（与直接请求 /detect 一致）。
+ * 环境变量 UNIVERSAL_FAKE_DETECT_URL 默认 http://127.0.0.1:8008（勿带尾斜杠）
+ */
+const UNIVERSAL_FAKE_DETECT_URL = (process.env.UNIVERSAL_FAKE_DETECT_URL || "http://127.0.0.1:8008").replace(
+  /\/$/,
+  "",
+);
+
+app.post("/api/detect/universal-fake-detect", async (req, res) => {
+  const sendErr = (status, msg) => res.status(status).json({ error: msg });
+  try {
+    const { imageUrl, imageBase64 } = req.body || {};
+    const pyBody = {};
+    if (imageUrl && typeof imageUrl === "string" && imageUrl.trim()) {
+      pyBody.image_url = imageUrl.trim();
+    }
+    if (imageBase64 && typeof imageBase64 === "string" && imageBase64.length > 0) {
+      pyBody.image_base64 = imageBase64;
+    }
+    if (!pyBody.image_url && !pyBody.image_base64) {
+      return sendErr(400, "需要 imageUrl 或 imageBase64");
+    }
+    const ufdRes = await fetch(`${UNIVERSAL_FAKE_DETECT_URL}/detect`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(pyBody),
+    });
+    const text = await ufdRes.text();
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch (_) {
+      return sendErr(502, `UniversalFakeDetect 返回非 JSON: ${text.slice(0, 200)}`);
+    }
+    if (!ufdRes.ok) {
+      const st = ufdRes.status >= 400 && ufdRes.status < 600 ? ufdRes.status : 502;
+      return res.status(st).json(typeof data === "object" && data !== null ? data : { error: text });
+    }
+    res.json(data);
+  } catch (err) {
+    console.error("UniversalFakeDetect proxy error:", err);
+    sendErr(
+      502,
+      err && err.message
+        ? `无法连接 UniversalFakeDetect（请确认已启动: cd UniversalFakeDetect && uvicorn api:app --host 0.0.0.0 --port 8008）。${err.message}`
+        : "UniversalFakeDetect 代理失败",
+    );
+  }
+});
+
 app.post("/api/detect/volc-ims", async (req, res) => {
   const sendErr = (msg) => res.status(500).json({ error: msg });
   try {
@@ -829,6 +882,9 @@ app.post("/api/generate/i2v", async (req, res) => {
 
 const PORT = process.env.DETECT_PROXY_PORT || 3001;
 app.listen(PORT, () => {
+  console.log(
+    `UniversalFakeDetect 图片检测(代理→${UNIVERSAL_FAKE_DETECT_URL}): http://localhost:${PORT}/api/detect/universal-fake-detect`,
+  );
   if (VOLC_ARK_API_KEY && VOLC_ARK_VISION_MODEL) {
     console.log(`Volc Ark 图片敏感检测: http://localhost:${PORT}/api/detect/volc-ims`);
     console.log(`Volc Ark 视频敏感检测: http://localhost:${PORT}/api/detect/volc-video-ims`);

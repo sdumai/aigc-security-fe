@@ -15,7 +15,7 @@ import {
   Button,
   Input,
   Tabs,
-  Checkbox,
+  Radio,
 } from "antd";
 import {
   UploadOutlined,
@@ -26,22 +26,42 @@ import {
   EyeOutlined,
 } from "@ant-design/icons";
 import type { UploadFile, UploadProps } from "antd";
-import { apiBase } from "@/utils/apiBase";
+// import { apiBase } from "@/utils/apiBase";
+const apiBase = "http://10.102.32.144:3001";
 
 const { Title, Paragraph, Text } = Typography;
 const { Dragger } = Upload;
 
-// 可选的检测模型
-const DETECTION_MODELS = [
-  { value: "XceptionNet", label: "XceptionNet", description: "基于Xception架构的Deepfake检测模型" },
-  { value: "EfficientNet-B4", label: "EfficientNet-B4", description: "高效的卷积神经网络模型" },
-  { value: "ResNet-101", label: "ResNet-101", description: "深度残差网络，适用于人脸伪造检测" },
-  { value: "FaceForensics++", label: "FaceForensics++", description: "专门的人脸伪造检测数据集训练模型" },
-];
+/** 图片检测后端：火山 = 原 volc-image-aigc；Universal = 实验室 UniversalFakeDetect */
+const IMAGE_DETECT_BACKENDS = [
+  {
+    value: "volc",
+    label: "火山引擎",
+    description: "方舟多模态图片理解，返回 isAIGenerated / confidence / reason",
+  },
+  {
+    value: "universal",
+    label: "UniversalFakeDetect",
+    description: "通用伪造检测（CLIP），返回 is_ai_generated / score / message 等",
+  },
+] as const;
+
+type ImageDetectBackend = (typeof IMAGE_DETECT_BACKENDS)[number]["value"];
+
+function formatApiErrorPayload(data: { error?: string; detail?: unknown }): string {
+  const d = data.detail;
+  if (typeof d === "string") return d;
+  if (Array.isArray(d)) {
+    return d.map((x: { msg?: string }) => x?.msg || String(x)).join("；") || "请求无效";
+  }
+  return data.error || "检测失败";
+}
 
 interface DetectionResult {
   isFake: boolean;
   confidence: number;
+  /** 模型输出的原始得分（0~1），用于与进度条旁百分比对照展示 */
+  rawScore?: number;
   heatmapUrl: string;
   model: string;
   details: {
@@ -75,7 +95,7 @@ const FakeDetectPage = () => {
   const [videoPreviewUrl, setVideoPreviewUrl] = useState<string>("");
   const [activeTab, setActiveTab] = useState<string>("upload");
   const [videoInputTab, setVideoInputTab] = useState<"url" | "upload">("upload");
-  const [selectedModels, setSelectedModels] = useState<string[]>(["XceptionNet"]);
+  const [imageDetectBackend, setImageDetectBackend] = useState<ImageDetectBackend>("volc");
   const [currentStep, setCurrentStep] = useState<number>(1);
 
   const handleUpload: UploadProps["customRequest"] = async (options) => {
@@ -218,9 +238,16 @@ const FakeDetectPage = () => {
         setLoading(false);
         return;
       }
+      const vConf =
+        typeof data.confidence === "number" && !Number.isNaN(data.confidence)
+          ? Math.min(1, Math.max(0, data.confidence))
+          : data.isFake
+            ? 0.8
+            : 0.2;
       setResult({
         isFake: data.isFake,
-        confidence: data.confidence,
+        confidence: vConf,
+        rawScore: vConf,
         model: data.model || "视频 AI 生成识别",
         heatmapUrl: data.heatmapUrl ?? url,
         details: data.details ?? {},
@@ -247,16 +274,10 @@ const FakeDetectPage = () => {
       return;
     }
 
-    if (selectedModels.length === 0) {
-      message.warning("请至少选择一个检测模型");
-      return;
-    }
-
     try {
       setLoading(true);
       setResult(null);
 
-      const primaryModel = selectedModels[0];
       const body: { imageUrl?: string; imageBase64?: string } = {};
       const rawFile = (uploadedFile as UploadFile).originFileObj ?? (uploadedFile as unknown as File);
       if (activeTab === "upload" && rawFile instanceof File) {
@@ -273,28 +294,63 @@ const FakeDetectPage = () => {
         setLoading(false);
         return;
       }
-      const res = await fetch(`${apiBase}/api/detect/volc-image-aigc`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || "图片检测失败");
-      }
-      const isAIGenerated = data.isAIGenerated === true;
-      const confidence =
-        typeof data.confidence === "number" ? Math.min(1, Math.max(0, data.confidence)) : isAIGenerated ? 0.8 : 0.2;
-      const reason = (data.reason || "").trim();
-      const artifacts: string[] = reason ? [reason] : isAIGenerated ? ["判定为 AI 生成/合成"] : [];
 
-      const detectionResult: DetectionResult = {
-        isFake: isAIGenerated,
-        confidence,
-        model: primaryModel,
-        details: { artifacts },
-        heatmapUrl: previewUrl,
-      };
+      let detectionResult: DetectionResult;
+
+      if (imageDetectBackend === "volc") {
+        const res = await fetch(`${apiBase}/api/detect/volc-image-aigc`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(formatApiErrorPayload(data));
+        }
+        const isAIGenerated = data.isAIGenerated === true;
+        const confidence =
+          typeof data.confidence === "number" ? Math.min(1, Math.max(0, data.confidence)) : isAIGenerated ? 0.8 : 0.2;
+        const reason = (data.reason || "").trim();
+        const artifacts: string[] = reason ? [reason] : isAIGenerated ? ["判定为 AI 生成/合成"] : [];
+        detectionResult = {
+          isFake: isAIGenerated,
+          confidence,
+          rawScore: confidence,
+          model: "火山引擎",
+          details: { artifacts },
+          heatmapUrl: previewUrl,
+        };
+      } else {
+        const res = await fetch(`${apiBase}/api/detect/universal-fake-detect`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(formatApiErrorPayload(data));
+        }
+        const isFake = data.is_ai_generated === true;
+        const score =
+          typeof data.score === "number" && !Number.isNaN(data.score)
+            ? Math.min(1, Math.max(0, data.score))
+            : isFake
+              ? 0.8
+              : 0.2;
+        const msg = typeof data.message === "string" ? data.message.trim() : "";
+        const artifacts: string[] = [];
+        if (msg) artifacts.push(msg);
+        if (typeof data.arch === "string" && data.arch) artifacts.push(`模型架构: ${data.arch}`);
+        if (typeof data.threshold === "number") artifacts.push(`判定阈值: ${data.threshold}`);
+        detectionResult = {
+          isFake,
+          confidence: score,
+          rawScore: score,
+          model: "UniversalFakeDetect",
+          details: { artifacts },
+          heatmapUrl: previewUrl,
+        };
+      }
 
       setResult(detectionResult);
       setCurrentStep(3);
@@ -333,7 +389,7 @@ const FakeDetectPage = () => {
     setVideoFile(null);
     setVideoUploadFileName("");
     setCurrentStep(1);
-    setSelectedModels(["XceptionNet"]);
+    setImageDetectBackend("volc");
   };
 
   /** 视频选择（本地上传）：仅选择文件，检测时以 base64 发送 */
@@ -562,10 +618,14 @@ const FakeDetectPage = () => {
                               icon={<ScanOutlined />}
                               onClick={handleDetect}
                               loading={loading}
-                              disabled={loading || selectedModels.length === 0}
+                              disabled={loading}
                               style={{ height: 44, borderRadius: 8 }}
                             >
-                              {loading ? "检测中..." : `使用 ${selectedModels.length} 个模型开始检测`}
+                              {loading
+                                ? "检测中..."
+                                : `开始检测（${
+                                    IMAGE_DETECT_BACKENDS.find((b) => b.value === imageDetectBackend)?.label ?? ""
+                                  }）`}
                             </Button>
                             <Button
                               block
@@ -593,16 +653,14 @@ const FakeDetectPage = () => {
                             }}
                             bodyStyle={{ padding: "16px 20px" }}
                           >
-                            <Paragraph style={{ marginBottom: 16, fontSize: 13, color: "#5c6b7a" }}>
-                              选择一个或多个检测模型进行综合分析，提高检测准确率
-                            </Paragraph>
-                            <Checkbox.Group
-                              value={selectedModels}
-                              onChange={(checkedValues) => setSelectedModels(checkedValues as string[])}
+
+                            <Radio.Group
+                              value={imageDetectBackend}
+                              onChange={(e) => setImageDetectBackend(e.target.value as ImageDetectBackend)}
                               style={{ width: "100%" }}
                             >
                               <Space direction="vertical" size={12} style={{ width: "100%" }}>
-                                {DETECTION_MODELS.map((model) => (
+                                {IMAGE_DETECT_BACKENDS.map((model) => (
                                   <Card
                                     key={model.value}
                                     size="small"
@@ -614,7 +672,7 @@ const FakeDetectPage = () => {
                                       transition: "border-color 0.2s, box-shadow 0.2s",
                                     }}
                                   >
-                                    <Checkbox value={model.value} style={{ width: "100%", alignItems: "flex-start" }}>
+                                    <Radio value={model.value} style={{ width: "100%", alignItems: "flex-start" }}>
                                       <div style={{ paddingLeft: 4 }}>
                                         <Text strong style={{ fontSize: 14 }}>
                                           {model.label}
@@ -624,11 +682,11 @@ const FakeDetectPage = () => {
                                           {model.description}
                                         </Text>
                                       </div>
-                                    </Checkbox>
+                                    </Radio>
                                   </Card>
                                 ))}
                               </Space>
-                            </Checkbox.Group>
+                            </Radio.Group>
                           </Card>
                         </Col>
                       </Row>
@@ -673,8 +731,8 @@ const FakeDetectPage = () => {
                 children: (
                   <Card title="上传待检测视频" bordered={false}>
                     <Paragraph type="secondary" style={{ marginBottom: 12 }}>
-                      对视频进行合成/深度伪造检测，使用多模态视频理解判断是否 AI 生成或篡改。支持公网 URL
-                      或本地上传（建议 ≤20MB）。
+                      对视频进行合成/深度伪造检测，使用<strong>火山引擎</strong>多模态视频理解。支持公网 URL
+                      或本地上传（建议 ≤20MB）。UniversalFakeDetect 当前仅支持单张图片，请在「图片 AI 合成检测」中使用。
                     </Paragraph>
                     <Tabs
                       activeKey={videoInputTab}
@@ -900,6 +958,20 @@ const FakeDetectPage = () => {
                       status={result.isFake ? "exception" : "success"}
                       strokeColor={result.isFake ? "#ff4d4f" : "#52c41a"}
                     />
+                    <Paragraph
+                      type="secondary"
+                      style={{
+                        marginTop: 10,
+                        marginBottom: 0,
+                        fontSize: 14,
+                        fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+                      }}
+                    >
+                      模型得分（0～1，越大越倾向 AI 生成/伪造）：
+                      <Text strong style={{ marginLeft: 6, color: result.isFake ? "#ff4d4f" : "#52c41a" }}>
+                        {(result.rawScore ?? result.confidence).toFixed(6)}
+                      </Text>
+                    </Paragraph>
                     {result.details.segmentConclusion && (
                       <Paragraph
                         type="secondary"
