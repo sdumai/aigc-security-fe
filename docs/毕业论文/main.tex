@@ -3,6 +3,10 @@
 \usepackage{geometry}
 \geometry{left=3cm,right=2.5cm,top=2.8cm,bottom=2.8cm}
 
+\usepackage{fontspec}
+\setmainfont{Times New Roman}
+
+\usepackage{graphicx}
 \usepackage{setspace}
 \onehalfspacing
 
@@ -15,15 +19,38 @@
 }
 
 \title{面向AIGC安全的多模态内容检测与分析平台设计与实现}
-\author{XXX}
+\author{麦世徐}
 \date{\today}
 
 \begin{document}
 
-\maketitle
+\input{cover}
+\clearpage
 
+% \input{score-sheet}
+% \clearpage
+
+\pagenumbering{gobble}
+\input{abstract-zh}
+\clearpage
+\input{abstract-en}
+\clearpage
+
+\pagenumbering{Roman}
 \tableofcontents
+\clearpage
 
-\include{chapter1}
+\pagenumbering{arabic}
+\setcounter{page}{1}
+
+\input{chapter1}
+\input{chapter2}
+\input{chapter3}
+\input{chapter4}
+\input{chapter5}
+\input{chapter6}
+\input{references}
+\input{acknowledgements}
+\input{appendix}
 
 \end{document}

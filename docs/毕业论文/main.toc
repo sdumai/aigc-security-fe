@@ -1,9 +1,92 @@
-\contentsline {chapter}{\numberline {第一章\hspace {.3em}}绪论}{2}{chapter.1}%
-\contentsline {section}{\numberline {1.1}研究背景与意义}{2}{section.1.1}%
-\contentsline {section}{\numberline {1.2}国内外研究现状}{2}{section.1.2}%
-\contentsline {subsection}{\numberline {1.2.1}AIGC生成技术研究现状}{2}{subsection.1.2.1}%
-\contentsline {subsection}{\numberline {1.2.2}AI生成内容检测研究现状}{3}{subsection.1.2.2}%
-\contentsline {subsection}{\numberline {1.2.3}不安全内容审核研究现状}{3}{subsection.1.2.3}%
-\contentsline {section}{\numberline {1.3}本文的主要研究内容}{3}{section.1.3}%
-\contentsline {section}{\numberline {1.4}本文的特色与创新点}{4}{section.1.4}%
+\contentsline {chapter}{\numberline {第一章\hspace {.3em}}绪论}{1}{chapter.1}%
+\contentsline {section}{\numberline {1.1}研究背景与意义}{1}{section.1.1}%
+\contentsline {section}{\numberline {1.2}国内外研究现状}{1}{section.1.2}%
+\contentsline {subsection}{\numberline {1.2.1}AIGC生成技术研究现状}{1}{subsection.1.2.1}%
+\contentsline {subsection}{\numberline {1.2.2}AI生成内容检测研究现状}{2}{subsection.1.2.2}%
+\contentsline {subsection}{\numberline {1.2.3}不安全内容审核研究现状}{2}{subsection.1.2.3}%
+\contentsline {subsection}{\numberline {1.2.4}现有研究的不足与问题分析}{3}{subsection.1.2.4}%
+\contentsline {section}{\numberline {1.3}研究内容与技术路线}{3}{section.1.3}%
+\contentsline {subsection}{\numberline {1.3.1}主要研究内容}{3}{subsection.1.3.1}%
+\contentsline {subsection}{\numberline {1.3.2}技术路线}{3}{subsection.1.3.2}%
+\contentsline {section}{\numberline {1.4}论文特色与创新点}{4}{section.1.4}%
 \contentsline {section}{\numberline {1.5}论文结构安排}{4}{section.1.5}%
+\contentsline {chapter}{\numberline {第二章\hspace {.3em}}相关技术与理论基础}{5}{chapter.2}%
+\contentsline {section}{\numberline {2.1}AIGC图像与视频生成技术基础}{5}{section.2.1}%
+\contentsline {subsection}{\numberline {2.1.1}图像生成技术演进}{5}{subsection.2.1.1}%
+\contentsline {subsection}{\numberline {2.1.2}视频生成技术路线}{6}{subsection.2.1.2}%
+\contentsline {subsection}{\numberline {2.1.3}AIGC生成内容的安全相关特征}{6}{subsection.2.1.3}%
+\contentsline {section}{\numberline {2.2}Deepfake与多模态内容伪造技术}{7}{section.2.2}%
+\contentsline {subsection}{\numberline {2.2.1}面向人脸的深度伪造技术}{7}{subsection.2.2.1}%
+\contentsline {subsection}{\numberline {2.2.2}面向通用场景的多模态伪造与编辑技术}{7}{subsection.2.2.2}%
+\contentsline {section}{\numberline {2.3}虚假内容检测方法}{7}{section.2.3}%
+\contentsline {subsection}{\numberline {2.3.1}基于低层统计与频域特征的检测方法}{7}{subsection.2.3.1}%
+\contentsline {subsection}{\numberline {2.3.2}基于监督分类的检测方法}{8}{subsection.2.3.2}%
+\contentsline {subsection}{\numberline {2.3.3}基于通用视觉表征与重建对比学习的检测方法}{8}{subsection.2.3.3}%
+\contentsline {subsection}{\numberline {2.3.4}面向视频的时序检测方法}{9}{subsection.2.3.4}%
+\contentsline {subsection}{\numberline {2.3.5}不同检测方法的比较与适用场景}{9}{subsection.2.3.5}%
+\contentsline {section}{\numberline {2.4}不安全内容检测与安全审查方法}{9}{section.2.4}%
+\contentsline {subsection}{\numberline {2.4.1}内容安全审查的任务目标}{9}{subsection.2.4.1}%
+\contentsline {subsection}{\numberline {2.4.2}基于视觉分类的内容审核方法}{10}{subsection.2.4.2}%
+\contentsline {subsection}{\numberline {2.4.3}基于多模态大模型的安全审查方法}{10}{subsection.2.4.3}%
+\contentsline {subsection}{\numberline {2.4.4}生成安全评测与防护研究的启示}{10}{subsection.2.4.4}%
+\contentsline {section}{\numberline {2.5}系统开发关键技术}{11}{section.2.5}%
+\contentsline {subsection}{\numberline {2.5.1}前端交互与可视化技术}{11}{subsection.2.5.1}%
+\contentsline {subsection}{\numberline {2.5.2}后端代理与服务编排技术}{11}{subsection.2.5.2}%
+\contentsline {subsection}{\numberline {2.5.3}模型服务化部署技术}{11}{subsection.2.5.3}%
+\contentsline {section}{\numberline {2.6}本章小结}{12}{section.2.6}%
+\contentsline {chapter}{\numberline {第三章\hspace {.3em}}系统需求分析与总体设计}{13}{chapter.3}%
+\contentsline {section}{\numberline {3.1}系统建设目标}{13}{section.3.1}%
+\contentsline {section}{\numberline {3.2}功能需求分析}{13}{section.3.2}%
+\contentsline {subsection}{\numberline {3.2.1}图像与视频输入需求}{13}{subsection.3.2.1}%
+\contentsline {subsection}{\numberline {3.2.2}虚假内容检测需求}{13}{subsection.3.2.2}%
+\contentsline {subsection}{\numberline {3.2.3}不安全内容审核需求}{13}{subsection.3.2.3}%
+\contentsline {subsection}{\numberline {3.2.4}结果展示与内容管理需求}{13}{subsection.3.2.4}%
+\contentsline {section}{\numberline {3.3}非功能需求分析}{13}{section.3.3}%
+\contentsline {subsection}{\numberline {3.3.1}可扩展性需求}{13}{subsection.3.3.1}%
+\contentsline {subsection}{\numberline {3.3.2}可维护性需求}{13}{subsection.3.3.2}%
+\contentsline {subsection}{\numberline {3.3.3}响应性能需求}{13}{subsection.3.3.3}%
+\contentsline {subsection}{\numberline {3.3.4}安全性与可部署性需求}{13}{subsection.3.3.4}%
+\contentsline {section}{\numberline {3.4}系统总体架构设计}{13}{section.3.4}%
+\contentsline {section}{\numberline {3.5}系统核心业务流程设计}{13}{section.3.5}%
+\contentsline {section}{\numberline {3.6}模块划分与接口关系设计}{13}{section.3.6}%
+\contentsline {section}{\numberline {3.7}本章小结}{13}{section.3.7}%
+\contentsline {chapter}{\numberline {第四章\hspace {.3em}}关键方法与平台实现}{14}{chapter.4}%
+\contentsline {section}{\numberline {4.1}多源检测框架设计}{15}{section.4.1}%
+\contentsline {section}{\numberline {4.2}图像虚假内容检测模块实现}{15}{section.4.2}%
+\contentsline {subsection}{\numberline {4.2.1}本地检测模型接入}{15}{subsection.4.2.1}%
+\contentsline {subsection}{\numberline {4.2.2}图像AI鉴别接口接入}{15}{subsection.4.2.2}%
+\contentsline {section}{\numberline {4.3}视频虚假内容检测模块实现}{15}{section.4.3}%
+\contentsline {subsection}{\numberline {4.3.1}视频理解接口接入}{15}{subsection.4.3.1}%
+\contentsline {subsection}{\numberline {4.3.2}视频检测结果结构化设计}{15}{subsection.4.3.2}%
+\contentsline {section}{\numberline {4.4}不安全内容检测模块实现}{15}{section.4.4}%
+\contentsline {subsection}{\numberline {4.4.1}图像安全审核模块}{15}{subsection.4.4.1}%
+\contentsline {subsection}{\numberline {4.4.2}视频安全审核模块}{15}{subsection.4.4.2}%
+\contentsline {section}{\numberline {4.5}样本生成与内容管理模块实现}{15}{section.4.5}%
+\contentsline {section}{\numberline {4.6}风险分级与可视化展示实现}{15}{section.4.6}%
+\contentsline {section}{\numberline {4.7}前后端平台开发与部署实现}{15}{section.4.7}%
+\contentsline {subsection}{\numberline {4.7.1}前端页面与交互实现}{15}{subsection.4.7.1}%
+\contentsline {subsection}{\numberline {4.7.2}后端代理与任务调度实现}{15}{subsection.4.7.2}%
+\contentsline {subsection}{\numberline {4.7.3}模型服务部署实现}{15}{subsection.4.7.3}%
+\contentsline {section}{\numberline {4.8}本章小结}{15}{section.4.8}%
+\contentsline {chapter}{\numberline {第五章\hspace {.3em}}实验设计与结果分析}{16}{chapter.5}%
+\contentsline {section}{\numberline {5.1}实验环境与评价指标}{16}{section.5.1}%
+\contentsline {section}{\numberline {5.2}数据集与测试样本构建}{16}{section.5.2}%
+\contentsline {subsection}{\numberline {5.2.1}公开数据集选取}{16}{subsection.5.2.1}%
+\contentsline {subsection}{\numberline {5.2.2}平台生成样本构建}{16}{subsection.5.2.2}%
+\contentsline {subsection}{\numberline {5.2.3}风险场景样本整理}{16}{subsection.5.2.3}%
+\contentsline {section}{\numberline {5.3}图像虚假内容检测实验}{16}{section.5.3}%
+\contentsline {section}{\numberline {5.4}视频内容检测与审核实验}{16}{section.5.4}%
+\contentsline {section}{\numberline {5.5}多方法对比与结果讨论}{16}{section.5.5}%
+\contentsline {section}{\numberline {5.6}系统性能与可用性测试}{16}{section.5.6}%
+\contentsline {section}{\numberline {5.7}实验结果分析}{16}{section.5.7}%
+\contentsline {section}{\numberline {5.8}本章小结}{16}{section.5.8}%
+\contentsline {chapter}{\numberline {第六章\hspace {.3em}}总结与展望}{17}{chapter.6}%
+\contentsline {section}{\numberline {6.1}全文工作总结}{17}{section.6.1}%
+\contentsline {section}{\numberline {6.2}存在的不足}{17}{section.6.2}%
+\contentsline {section}{\numberline {6.3}后续研究展望}{17}{section.6.3}%
+\contentsline {chapter}{参考文献}{18}{chapter*.4}%
+\contentsline {chapter}{致谢}{19}{chapter*.5}%
+\contentsline {chapter}{附录}{20}{chapter*.6}%
+\contentsline {section}{\numberline {6.4}附录A 补充代码与接口说明}{20}{section.6.4}%
+\contentsline {section}{\numberline {6.5}附录B 外文译文}{20}{section.6.5}%
+\contentsline {section}{\numberline {6.6}附录C 外文原文}{20}{section.6.6}%
