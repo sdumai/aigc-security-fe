@@ -1,8 +1,70 @@
 \chapter*{附录}
+\markboth{附录}{附录}
+\phantomsection
 \addcontentsline{toc}{chapter}{附录}
 
-\section{附录A 补充代码与接口说明}
+\section*{附录A 补充代码与接口说明}
+\phantomsection
+\addcontentsline{toc}{section}{附录A 补充代码与接口说明}
 
-\section{附录B 外文译文}
+为便于说明本文系统实现与实验组织的对应关系，现对主要代码模块、功能页面、后端接口及运行端口作补充说明。
 
-\section{附录C 外文原文}
+1. 前端路由与页面职责。系统前端共包含 6 个核心页面：首页负责平台总览与导航；Deepfake 生成页负责换脸、人脸动画和属性编辑等能力调用；通用生成页负责文生图、文生视频与图生视频任务；虚假内容检测页负责图像与视频真实性检测；不安全内容检测页负责图像与视频审核；数据管理页负责结果浏览与后续扩展的数据管理功能。相关路由集中定义于 \texttt{src/routes/index.tsx}。
+
+2. 后端接口组织。后端代理服务集中实现于 \texttt{server/index.cjs}，当前已封装的主要接口可分为两类。
+
+检测类接口包括：
+
+\texttt{/api/detect/universal-fake-detect}
+
+\texttt{/api/detect/volc-image-aigc}
+
+\texttt{/api/detect/volc-video-aigc}
+
+\texttt{/api/detect/volc-ims}
+
+\texttt{/api/detect/volc-video-ims}
+
+生成类接口包括：
+
+\texttt{/api/generate/faceswap}
+
+\texttt{/api/generate/seededit}
+
+\texttt{/api/generate/fomm}
+
+\texttt{/api/generate/image}
+
+\texttt{/api/generate/image-stable-diffusion}
+
+\texttt{/api/generate/model-scope}
+
+\texttt{/api/generate/t2v}
+
+\texttt{/api/generate/i2v}
+
+这一组织方式使前端能够通过统一入口调用不同来源的能力，并由后端负责密钥隔离、参数封装和结果归一化。
+
+3. 本地服务运行端口。依据当前系统部署方案，后端代理服务运行在 3001 端口，UniversalFakeDetect 服务运行在 8008 端口，Stable Diffusion 文生图服务运行在 8009 端口，ModelScope 文生视频服务运行在 8011 端口。前端生产环境页面通过静态资源方式部署，实验阶段访问地址可根据服务器配置进行调整。
+
+4. 样本与资源目录。平台实验过程中使用的样本主要来源于三部分：公开数据样本目录 \texttt{datasets/}，平台生成和功能验证所需资源目录 \texttt{public/mock/}，以及系统实现文档所在的 \texttt{docs/} 目录。通过将公开数据样本、平台生成样本和开放场景样本进行组合，本文能够在当前阶段完成针对图像真假检测、视频链路验证和内容安全审核的实验组织。
+
+\section*{附录B 运行与复现实验说明}
+\phantomsection
+\addcontentsline{toc}{section}{附录B 运行与复现实验说明}
+
+为保证本课题具备较好的可复现性，本文在系统运行与实验组织方面采用如下约定。
+
+1. 环境配置。前端采用 React、TypeScript 与 Vite 进行构建，后端采用 Node.js 与 Express 实现代理层，本地模型服务采用 Python、FastAPI 与 PyTorch 进行封装。各模块通过 HTTP 接口通信，便于本地开发与远程部署切换。
+
+2. 部署方式。项目根目录保留的主要部署脚本包括：
+
+\texttt{快速部署.sh}
+
+\texttt{deploy-backend.sh}
+
+二者分别用于前端静态资源部署与后端代理服务部署。实验阶段，本地模型服务和后端服务可通过 \texttt{tmux} 会话保持运行，以支持持续调试和结果复核。
+
+3. 实验复现思路。若需复现本文实验，可优先完成后端与本地模型服务的启动，随后从前端页面依次验证图像真假检测、视频真假检测、图像安全审核、视频安全审核以及生成模块。对于图像真实性实验，可直接使用 \texttt{datasets/test/progan/} 下的样本；对于链路验证任务，可结合 \texttt{public/mock/} 下的测试媒体进行页面级验证。
+
+4. 说明。由于本文对应系统仍处于毕业设计持续完善阶段，部分模块在后续版本中可能继续调整交互形式、结果展示样式与数据管理能力，但总体架构、接口划分和核心功能链路保持不变。
