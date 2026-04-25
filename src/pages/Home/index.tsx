@@ -56,8 +56,8 @@ const HomePage = () => {
         style={{
           background: "var(--color-primary)",
           borderRadius: "var(--radius-lg)",
-          padding: "48px 40px",
-          marginBottom: 36,
+          padding: "28px 28px",
+          marginBottom: 20,
           color: "white",
           textAlign: "center",
           boxShadow: "var(--shadow-md)",
@@ -65,7 +65,7 @@ const HomePage = () => {
       >
         <RocketOutlined style={{ fontSize: 48, marginBottom: 16, opacity: 0.9 }} />
         <Title level={1} style={{ color: "white", marginBottom: 12, fontSize: 28, fontFamily: "var(--font-heading)" }}>
-          AIGC 安全研究平台
+          AIGC 安全检测平台
         </Title>
         <Paragraph
           style={{
@@ -118,7 +118,7 @@ const HomePage = () => {
       </div>
 
       {/* 核心功能卡片 */}
-      <Row gutter={[24, 24]} style={{ marginBottom: 40 }}>
+      <Row gutter={[24, 24]} style={{ marginBottom: 20 }}>
         {coreFeatures.map((feature, index) => (
           <Col xs={24} md={8} key={index}>
             <Card

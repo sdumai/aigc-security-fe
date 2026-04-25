@@ -82,6 +82,15 @@
 
 这些生成模块在论文中的作用主要体现在两个方面。第一，它们使平台具备了多模态内容生产能力，可为后续检测模块构造样本。第二，它们验证了平台并不是一个孤立的“内容审查器”，而是一个可用于研究AIGC全链路安全问题的原型系统。
 
+图~\ref{fig:text-to-image-result} 展示了平台文生图模块的运行界面。该截图对应“输入提示词—选择生成模型—返回媒体结果”的典型生成流程，能够直观说明系统已经将外部生成能力封装为可交互的前端功能，而不是停留在后端接口调用层面。
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.98\textwidth]{figures/system/text-to-image-result.png}
+\caption{文生图生成结果展示界面}
+\label{fig:text-to-image-result}
+\end{figure}
+
 \subsection{数据管理模块现状与实现方式}
 
 数据管理模块用于承接生成结果与检测记录的浏览、回看和后续使用。从当前实现情况看，平台已经具备数据管理页面骨架、内容列表展示逻辑和检测记录展示逻辑，但完整的保存、检索和导出功能仍在持续完善中。换言之，该模块在当前版本中更多承担“研究结果组织入口”的角色，而非一个完整的生产级资产管理系统。
@@ -104,11 +113,50 @@
 
 在交互层面，前端主要围绕表单输入、文件上传、结果预览和状态提示展开。对于生成和检测任务，页面通常包含输入区、模型或任务选择区、执行按钮和结果展示区。对于结果较耗时的任务，前端还通过加载状态、提示信息和轮询等待结果等方式改善用户体验。与此同时，前端通过统一的接口访问封装，将所有请求都指向后端代理层，从而避免在页面组件中散落不同服务地址与鉴权逻辑。
 
+平台首页与模块导航界面如图~\ref{fig:platform-home} 所示。首页并不直接承担模型推理任务，而是用于组织生成、检测和内容管理等功能入口，使用户能够从统一入口进入不同安全分析流程。这种页面组织方式也与第三章提出的“统一入口、分任务展示、结果结构化”的前端设计原则相对应。
+
 \subsection{后端代理与任务调度实现}
 
 后端服务基于Node.js和Express实现，是整个平台的能力汇聚中心。它在实现上主要承担四类职责：一是统一接收前端请求并按任务路由至不同能力；二是处理外部接口鉴权，包括Bearer Token和HMAC-SHA256签名两种主要模式；三是对多模态大模型返回结果进行结构提取与统一封装；四是对异步生成任务执行轮询调度，使前端能够以相对简洁的同步调用方式获得最终结果。
 
 其中，异步任务封装是后端实现中的关键点之一。以视频生成任务为例，外部平台通常采用“提交任务—轮询查询—返回结果”的模式，如果前端直接处理这些步骤，将显著增加页面逻辑复杂度。后端通过统一封装轮询逻辑，将复杂异步流程收敛为单一业务接口，从而大幅简化前端实现。该设计直接体现了第三章中提出的“后端代理层承担差异消解与流程编排”的总体思路。
+
+后端代理层对同步检测任务和异步生成任务的处理流程如图~\ref{fig:backend-dispatch-flow} 所示。对于图像检测等同步任务，后端主要完成参数转换、接口调用和结果归一化；对于视频生成等异步任务，后端还需要承担任务创建、轮询查询和超时处理。通过这种封装，前端能够以统一业务接口调用不同能力，系统也因此具备较好的可维护性和扩展性。
+
+\begin{figure}[htbp]
+\centering
+\resizebox{0.98\textwidth}{!}{%
+\begin{tikzpicture}[
+  font=\small,
+  node distance=8mm and 9mm,
+  schedstep/.style={draw, rounded corners=3pt, thick, align=center, minimum width=2.7cm, minimum height=0.9cm, fill=blue!6},
+  proc/.style={draw, rounded corners=3pt, thick, align=center, minimum width=3.0cm, minimum height=0.9cm, fill=green!8},
+  ext/.style={draw, rounded corners=3pt, thick, align=center, minimum width=3.0cm, minimum height=0.9cm, fill=orange!10},
+  arrow/.style={-Latex, thick},
+  dashedarrow/.style={-Latex, thick, dashed}
+]
+  \node[schedstep] (front) {前端页面\\提交业务请求};
+  \node[proc, right=of front] (proxy) {后端代理\\参数校验/鉴权};
+  \node[proc, right=of proxy] (route) {任务路由\\同步或异步};
+  \node[ext, above right=7mm and 9mm of route] (sync) {同步能力调用\\图像检测/安全审核};
+  \node[ext, below right=7mm and 9mm of route] (async) {异步任务创建\\文生视频/图生视频};
+  \node[proc, right=3.9cm of route] (poll) {状态查询\\轮询/超时控制};
+  \node[proc, right=of poll] (norm) {结果归一化\\字段映射/容错};
+  \node[schedstep, right=of norm] (view) {前端展示\\标签/进度/说明};
+
+  \draw[arrow] (front) -- (proxy);
+  \draw[arrow] (proxy) -- (route);
+  \draw[arrow] (route) -- (sync);
+  \draw[arrow] (route) -- (async);
+  \draw[arrow] (sync.east) -| (norm.north);
+  \draw[arrow] (async.east) -| (poll.south);
+  \draw[arrow] (poll) -- (norm);
+  \draw[arrow] (norm) -- (view);
+  \draw[dashedarrow] (poll.south) .. controls +(0,-1.0) and +(0,-1.0) .. (async.south);
+\end{tikzpicture}}
+\caption{后端代理层任务调度与结果归一化流程}
+\label{fig:backend-dispatch-flow}
+\end{figure}
 
 \subsection{模型服务部署实现}
 

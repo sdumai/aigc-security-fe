@@ -505,7 +505,7 @@ const VOLC_ARK_I2V_MODEL = (
 const VOLC_ARK_IMAGE_MODEL = (
   process.env.VOLC_ARK_IMAGE_MODEL ||
   process.env.VITE_VOLC_ARK_IMAGE_MODEL ||
-  "doubao-seedream-4-0-250828"
+  "doubao-seedream-5-0-260128"
 ).trim();
 const VOLC_ARK_T2V_MODEL = (
   process.env.VOLC_ARK_T2V_MODEL ||
@@ -926,11 +926,7 @@ app.post("/api/generate/model-scope", async (req, res) => {
     });
   } catch (err) {
     console.error("ModelScope T2V proxy error:", err);
-    sendErr(
-      err && err.message
-        ? err.message
-        : "无法连接 ModelScope T2V（MODELSCOPE_T2V_URL / 默认 127.0.0.1:8011）",
-    );
+    sendErr(err && err.message ? err.message : "无法连接 ModelScope T2V（MODELSCOPE_T2V_URL / 默认 127.0.0.1:8011）");
   }
 });
 
@@ -1048,9 +1044,7 @@ app.listen(PORT, () => {
       `文生图(SD 代理→${STABLE_DIFFUSION_SERVICE_URL}): http://localhost:${PORT}/api/generate/image-stable-diffusion`,
     );
     console.log(`文生视频(火山): http://localhost:${PORT}/api/generate/t2v`);
-    console.log(
-      `文生视频(ModelScope→${MODELSCOPE_T2V_URL}): http://localhost:${PORT}/api/generate/model-scope`,
-    );
+    console.log(`文生视频(ModelScope→${MODELSCOPE_T2V_URL}): http://localhost:${PORT}/api/generate/model-scope`);
     console.log(`图生视频: http://localhost:${PORT}/api/generate/i2v`);
   }
 });

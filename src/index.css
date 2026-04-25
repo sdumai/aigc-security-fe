@@ -137,19 +137,19 @@ code {
 }
 
 .app-content {
-  margin: 24px;
-  padding: 28px 32px;
+  margin: 18px 0px;
+  padding: 24px 24px;
   background: var(--color-bg-content);
   border-radius: var(--radius-lg);
-  min-height: calc(100vh - 112px);
+  min-height: calc(100vh - 88px);
   box-shadow: var(--shadow-sm);
   border: 1px solid var(--color-border-light);
 }
 
 /* ========== 页面标题区 ========== */
 .page-header {
-  margin-bottom: 28px;
-  padding-bottom: 20px;
+  margin-bottom: 20px;
+  padding-bottom: 16px;
   border-bottom: 1px solid var(--color-border);
 }
 
@@ -199,10 +199,10 @@ code {
 }
 
 .result-card {
-  margin-top: 24px;
+  margin-top: 18px;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
-  padding: 24px;
+  padding: 20px;
   background: var(--color-bg-muted);
 }
 

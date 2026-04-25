@@ -151,7 +151,7 @@ const AppLayout = ({ children }: AppLayoutProps) => {
             style={{ height: "100%", borderRight: 0 }}
           />
         </Sider>
-        <Layout className="app-content-wrap" style={{ padding: "0 24px 24px" }}>
+        <Layout className="app-content-wrap" style={{ padding: "0 16px 16px" }}>
           <Content className="app-content">{children}</Content>
         </Layout>
       </Layout>

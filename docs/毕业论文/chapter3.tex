@@ -18,6 +18,14 @@
 
 基于上述分析，本文将系统设计目标进一步细化为以下几点：第一，支持图像与视频两类输入媒介，并兼容文件上传和链接输入两种常见方式；第二，支持虚假内容检测和不安全内容审核两类安全任务；第三，支持本地模型与外部接口协同工作，形成多源能力统一接入框架；第四，支持检测结果可视化、风险分级和历史管理；第五，支持内容生成与检测联动，为后续样本构建与实验验证提供平台基础。围绕这些目标展开的需求分析，将直接决定系统总体架构与模块划分方式。
 
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.98\textwidth]{figures/system/platform-home.png}
+  \caption{平台首页与功能模块导航界面}
+  \label{fig:platform-home}
+  \end{figure}
+
 \section{功能需求分析}
 
 \subsection{图像与视频输入需求}
@@ -90,6 +98,55 @@
 
 这种三层结构本质上是一种面向研究原型的松耦合设计。它既能支持本地模型复现，又能保留调用外部能力的灵活性；既能满足论文实验中的方法对比需求，也能支撑后续功能扩展和部署演示。因而，该架构与本文“研究验证 + 工程实现”并重的课题定位是匹配的。
 
+根据上述设计思路，本文平台总体架构如图~\ref{fig:system-architecture} 所示。该图并不强调某一个单独模型的内部结构，而是突出前端页面、后端代理、本地模型服务、外部能力接口与样本资源之间的协作关系。这样处理更符合本文系统设计型工作的重点，即说明多源能力如何被统一组织到同一安全分析平台中。
+
+\begin{figure}[htbp]
+\centering
+\resizebox{\textwidth}{!}{%
+\begin{tikzpicture}[
+  font=\small,
+  node distance=8mm and 8mm,
+  archbox/.style={draw, rounded corners=3pt, thick, align=center, minimum width=2.9cm, minimum height=0.85cm, fill=white},
+  groupbox/.style={draw, rounded corners=5pt, thick, inner sep=7pt},
+  arrow/.style={-Latex, thick},
+  dashedarrow/.style={-Latex, thick, dashed}
+]
+  \node[archbox, fill=blue!7] (home) at (0,0) {首页与导航};
+  \node[archbox, fill=blue!7, right=of home] (genpage) {生成页面};
+  \node[archbox, fill=blue!7, right=of genpage] (fakepage) {虚假检测页面};
+  \node[archbox, fill=blue!7, right=of fakepage] (safepage) {安全审核页面};
+  \node[archbox, fill=blue!7, right=of safepage] (datapage) {数据管理页面};
+  \node[groupbox, fit=(home)(genpage)(fakepage)(safepage)(datapage), label={[font=\bfseries]above:前端展示层}] (frontend) {};
+
+  \node[archbox, fill=green!8, below=1.35cm of genpage] (router) {统一API路由};
+  \node[archbox, fill=green!8, right=of router] (format) {参数校验\\格式转换};
+  \node[archbox, fill=green!8, right=of format] (auth) {密钥隔离\\签名鉴权};
+  \node[archbox, fill=green!8, right=of auth] (normalize) {任务调度\\结果归一化};
+  \node[groupbox, fit=(router)(format)(auth)(normalize), label={[font=\bfseries]above:后端代理层}] (backend) {};
+
+  \node[archbox, fill=orange!10, below=1.35cm of router] (ufd) {UniversalFakeDetect\\图像伪造检测};
+  \node[archbox, fill=orange!10, right=of ufd] (sd) {Stable Diffusion\\本地文生图};
+  \node[archbox, fill=orange!10, right=of sd] (ms) {ModelScope T2V\\本地文生视频};
+  \node[archbox, fill=orange!10, right=of ms] (volc) {火山方舟/视觉智能\\生成与审核接口};
+  \node[groupbox, fit=(ufd)(sd)(ms)(volc), label={[font=\bfseries]above:模型推理与外部能力层}] (capability) {};
+
+  \node[archbox, fill=gray!12, below=1.15cm of sd] (dataset) {公开样本\\\texttt{datasets/}};
+  \node[archbox, fill=gray!12, right=of dataset] (mockres) {演示资源\\\texttt{public/mock/}};
+  \node[archbox, fill=gray!12, right=of mockres] (records) {生成结果\\检测记录};
+  \node[groupbox, fit=(dataset)(mockres)(records), label={[font=\bfseries]above:样本与结果资源}] (datares) {};
+
+  \draw[arrow] (genpage.south) -- (router.north);
+  \draw[arrow] (fakepage.south) -- (format.north);
+  \draw[arrow] (safepage.south) -- (auth.north);
+  \draw[arrow] (datapage.south) -- (normalize.north);
+  \draw[arrow] (backend.south) -- (capability.north);
+  \draw[dashedarrow] (capability.south) -- (datares.north);
+  \draw[dashedarrow] (datares.west) .. controls +(0,1.6) and +(0,-1.6) .. (frontend.west);
+\end{tikzpicture}}
+\caption{AIGC安全分析平台总体架构}
+\label{fig:system-architecture}
+\end{figure}
+
 \subsection{前端展示层设计}
 
 前端展示层是用户与平台交互的入口，主要承担内容上传、任务选择、检测触发、结果展示和历史查看等功能。从整体结构看，前端不负责算法推理与复杂业务编排，而是通过相对统一的组件结构组织不同页面。按照当前课题目标，前端可以划分为首页、内容生成页、虚假检测页、不安全检测页和数据管理页等若干页面模块，各页面围绕具体业务场景提供相应操作入口。
@@ -113,6 +170,44 @@
 \subsection{内容检测流程设计}
 
 系统的基本检测流程可概括为“输入内容—任务选择—请求转发—结果解析—风险展示”。首先，用户在前端选择输入内容并指定任务类型，例如图像虚假检测、视频虚假检测、图像安全审核或视频安全审核。随后，前端将统一格式的请求发送给后端代理层。后端根据任务类型和能力配置，将请求转发至对应的本地模型服务或外部接口，并在收到结果后完成字段标准化与状态归一化处理。最后，前端根据统一结果结构完成风险标签、置信度、原因说明和预览信息的展示。
+
+为了使上述过程更加清晰，本文将内容检测流程抽象为图~\ref{fig:detection-flow}。该流程图体现了平台设计中的两个关键点：一是前端只面向统一任务入口，二是本地模型与外部接口均由后端代理层统一封装，最终以标准化结果返回前端展示。
+
+\begin{figure}[htbp]
+\centering
+\resizebox{0.98\textwidth}{!}{%
+\begin{tikzpicture}[
+  font=\small,
+  node distance=8mm and 10mm,
+  flowstep/.style={draw, rounded corners=3pt, thick, align=center, minimum width=2.75cm, minimum height=0.9cm, fill=blue!6},
+  decision/.style={draw, diamond, aspect=2.0, thick, align=center, inner sep=1pt, fill=yellow!15},
+  source/.style={draw, rounded corners=3pt, thick, align=center, minimum width=2.85cm, minimum height=0.9cm, fill=orange!10},
+  arrow/.style={-Latex, thick}
+]
+  \node[flowstep] (input) {图像/视频输入\\文件或URL};
+  \node[flowstep, right=of input] (frontend) {前端预处理\\预览与任务选择};
+  \node[flowstep, right=of frontend] (backend) {后端代理\\参数校验与路由};
+  \node[decision, right=of backend] (dispatch) {能力\\来源};
+  \node[source, above right=7mm and 10mm of dispatch] (local) {本地模型服务\\UFD/SD/T2V};
+  \node[source, below right=7mm and 10mm of dispatch] (external) {外部平台接口\\方舟/视觉智能};
+  \node[flowstep, right=4.2cm of dispatch] (normalize) {结果解析\\字段标准化};
+  \node[flowstep, right=of normalize] (visual) {风险可视化\\标签/置信度/说明};
+  \node[flowstep, below=1.05cm of visual] (record) {结果管理\\记录与回溯};
+
+  \draw[arrow] (input) -- (frontend);
+  \draw[arrow] (frontend) -- (backend);
+  \draw[arrow] (backend) -- (dispatch);
+  \draw[arrow] (dispatch) -- (local);
+  \draw[arrow] (dispatch) -- (external);
+  \draw[arrow] (local.east) -| (normalize.north);
+  \draw[arrow] (external.east) -| (normalize.south);
+  \draw[arrow] (normalize) -- (visual);
+  \draw[arrow] (visual) -- (record);
+  \draw[arrow] (record.west) .. controls +(-2.0,0) and +(0,-1.1) .. (frontend.south);
+\end{tikzpicture}}
+\caption{内容安全检测业务流程}
+\label{fig:detection-flow}
+\end{figure}
 
 这一流程的关键在于“结果解析”环节。由于不同检测后端返回的数据结构差异较大，如果没有统一结果结构，前端就必须为每种能力编写单独渲染逻辑，系统复杂度会迅速增加。因此，在总体设计中，结果结构的统一性是业务流程顺畅运行的核心前提。
 

@@ -40,7 +40,7 @@ interface ImageResult {
 }
 
 const IMAGE_MODEL_OPTIONS = [
-  { value: "volc", label: "火山引擎（方舟）", endpoint: "/api/generate/image" },
+  { value: "volc", label: "seedream-5.0", endpoint: "/api/generate/image" },
   { value: "stable-diffusion", label: "Stable Diffusion", endpoint: "/api/generate/image-stable-diffusion" },
 ] as const;
 
@@ -431,7 +431,8 @@ const GeneralGeneratePage = () => {
             </Form.Item>
             {videoModel === "modelscope" && (
               <Paragraph type="secondary" style={{ marginTop: -8, marginBottom: 8 }}>
-                与文生图里选 Stable Diffusion 类似：由后端转发至 MODELSCOPE_T2V_URL（默认 8011）。参数对应 server.py：prompt、num_frames(4–24)、num_inference_steps(10–50)。
+                与文生图里选 Stable Diffusion 类似：由后端转发至 MODELSCOPE_T2V_URL（默认 8011）。参数对应
+                server.py：prompt、num_frames(4–24)、num_inference_steps(10–50)。
               </Paragraph>
             )}
             <Form.Item label="提示词（Prompt）" name="prompt" rules={[{ required: true, message: "请输入提示词" }]}>
