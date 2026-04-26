@@ -81,15 +81,6 @@
 
 在结果解释方面，外部图像AI鉴别接口返回的 \texttt{reason} 字段会被前端展示为可疑痕迹说明；本地UniversalFakeDetect返回的模型架构、阈值和判定信息则被组织为辅助说明。二者虽然来源不同，但最终都进入相同的展示区域。这种设计使用户能够在同一页面中比较“本地判别分数”和“多模态解释文本”，也体现了平台对不同检测范式的兼容能力。
 
-图~\ref{fig:fake-detect-page} 展示了图像虚假检测模块的页面形态。页面左侧用于输入图片并选择检测方式，右侧用于展示检测步骤、当前状态和最终结果。该页面设计对应了本文“统一入口、分任务展示、结果结构化”的前端原则，使本地模型和外部接口的检测结果能够在同一界面中呈现。
-
-\begin{figure}[htbp]
-\centering
-\includegraphics[width=0.98\textwidth]{figures/system/fake-detect-page.png}
-\caption{图像虚假内容检测模块界面}
-\label{fig:fake-detect-page}
-\end{figure}
-
 \section{视频虚假内容检测模块实现}
 
 \subsection{视频理解接口接入实现}
