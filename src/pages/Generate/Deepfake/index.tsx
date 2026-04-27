@@ -1,125 +1,80 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import {
-  Card,
-  Form,
-  Radio,
-  Select,
-  Button,
-  Upload,
-  Row,
-  Col,
-  message,
-  Spin,
-  Typography,
-  Image,
-  Space,
-  Input,
-  Modal,
-} from "antd";
-import { UploadOutlined, ThunderboltOutlined, DownloadOutlined } from "@ant-design/icons";
+import { Col, Form, message, Row, Typography } from "antd";
 import type { UploadFile } from "antd";
-import request from "@/utils/request";
-import { apiBase } from "@/utils/apiBase";
+
+import {
+  DEEPFAKE_DEFAULT_FUNCTION,
+  DEEPFAKE_FUNCTION_LABELS,
+  EMPTY_UPLOAD_COUNT,
+  FACE_ANIMATION_DEFAULT_PROMPT,
+  PRIMARY_UPLOAD_INDEX,
+} from "@/constants/generate";
+import { DATA_OUTPUT_ROUTE } from "@/constants/routes";
+import {
+  COL_FULL_SPAN,
+  COL_HALF_LG_SPAN,
+  DEEPFAKE_RESULT_IMAGE_WIDTH,
+  GRID_GUTTER,
+  MESSAGE_DURATION_SECONDS,
+  MESSAGE_LOADING_DURATION_FOREVER,
+  SAVE_NAVIGATION_DELAY_MS,
+  TITLE_LEVEL_TWO,
+} from "@/constants/ui";
+import { DeepfakeGenerateForm } from "@/components/Generation/Deepfake/DeepfakeGenerateForm";
+import { ImagePreviewModal } from "@/components/Generation/common/ImagePreviewModal";
+import { MediaResultCard } from "@/components/Generation/common/MediaResultCard";
+import {
+  generateFaceAnimation,
+  generateFaceSwap,
+  generateSeedEdit,
+} from "@/services/generate";
+import { saveGeneratedContent } from "@/services/content";
+import type { IDeepfakeFormValues, IGenerateResult, TDeepfakeFunction } from "@/typings/generate";
+import { downloadMedia, getBase64FromUploadFile, getUploadPreviewUrl } from "@/utils/media";
 
 const { Title, Paragraph } = Typography;
-const { TextArea } = Input;
-
-type FunctionType = "faceswap" | "fomm" | "stargan";
-type ModelType =
-  | "FaceShifter"
-  | "SimSwap"
-  | "DeepFaceLab"
-  | "FaceSwap-GAN"
-  | "FOMM"
-  | "Face2Face"
-  | "Wav2Lip"
-  | "LivePortrait"
-  | "StarGAN"
-  | "StarGAN-v2"
-  | "AttGAN"
-  | "STGAN";
-
-interface GenerateResult {
-  imageUrl?: string;
-  videoUrl?: string;
-  message: string;
-}
 
 const DeepfakeGeneratePage = () => {
   const navigate = useNavigate();
-  const [form] = Form.useForm();
+  const [form] = Form.useForm<IDeepfakeFormValues>();
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<GenerateResult | null>(null);
+  const [result, setResult] = useState<IGenerateResult | null>(null);
   const [targetFile, setTargetFile] = useState<UploadFile[]>([]);
   const [sourceFile, setSourceFile] = useState<UploadFile[]>([]);
-  const [functionType, setFunctionType] = useState<FunctionType>("faceswap");
+  const [functionType, setFunctionType] = useState<TDeepfakeFunction>(DEEPFAKE_DEFAULT_FUNCTION);
   const [previewOpen, setPreviewOpen] = useState(false);
-  const [previewImageUrl, setPreviewImageUrl] = useState<string>("");
+  const [previewImageUrl, setPreviewImageUrl] = useState("");
 
   const handleUploadPreview = async (file: UploadFile) => {
-    let url = file.url ?? file.thumbUrl ?? "";
-    if (!url && file.originFileObj) {
-      url = await new Promise<string>((resolve) => {
-        const r = new FileReader();
-        r.onload = () => resolve(r.result as string);
-        r.readAsDataURL(file.originFileObj as Blob);
-      });
-    }
+    const url = await getUploadPreviewUrl(file);
+
     if (url) {
       setPreviewImageUrl(url);
       setPreviewOpen(true);
     }
   };
 
-  const modelOptions: Record<FunctionType, ModelType[]> = {
-    faceswap: ["FaceShifter", "SimSwap", "DeepFaceLab", "FaceSwap-GAN"],
-    fomm: ["FOMM", "Face2Face", "Wav2Lip", "LivePortrait"],
-    stargan: ["StarGAN", "StarGAN-v2", "AttGAN", "STGAN"],
-  };
+  const getTargetImageBase64 = async () => {
+    const imageBase64 = targetFile[PRIMARY_UPLOAD_INDEX] ? await getBase64FromUploadFile(targetFile[PRIMARY_UPLOAD_INDEX]) : "";
 
-  /** 安全解析 JSON 响应，避免空 body 导致 Unexpected end of JSON input */
-  const parseJsonResponse = async (res: Response): Promise<Record<string, unknown>> => {
-    const text = await res.text();
-    if (!text.trim()) {
-      throw new Error(res.ok ? "未返回有效数据" : `请求失败 ${res.status}，请检查后端服务是否启动`);
+    if (!imageBase64) {
+      throw new Error("无法读取目标人脸图片，请重新上传");
     }
-    try {
-      return JSON.parse(text) as Record<string, unknown>;
-    } catch {
-      throw new Error(res.ok ? "返回格式异常" : `请求失败 ${res.status}，请检查后端服务`);
-    }
-  };
 
-  const getBase64FromUploadFile = (file: UploadFile): Promise<string> => {
-    const dataUrl = (file as any).url;
-    if (typeof dataUrl === "string" && dataUrl.indexOf(",") >= 0) {
-      return Promise.resolve(dataUrl.split(",")[1] || "");
-    }
-    const raw = (file as any).originFileObj;
-    if (!(raw instanceof File)) return Promise.resolve("");
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => {
-        const s = (reader.result as string) || "";
-        resolve(s.indexOf(",") >= 0 ? s.split(",")[1] : s);
-      };
-      reader.onerror = reject;
-      reader.readAsDataURL(raw);
-    });
+    return imageBase64;
   };
 
   const handleGenerate = async () => {
     try {
-      await form.validateFields();
-      const values = form.getFieldsValue();
+      const values = await form.validateFields();
 
-      if (targetFile.length === 0) {
+      if (targetFile.length === EMPTY_UPLOAD_COUNT) {
         message.warning("请上传目标人脸图片");
         return;
       }
 
-      if (values.function === "faceswap" && sourceFile.length === 0) {
+      if (values.function === "faceswap" && sourceFile.length === EMPTY_UPLOAD_COUNT) {
         message.warning("请上传驱动人脸");
         return;
       }
@@ -128,88 +83,37 @@ const DeepfakeGeneratePage = () => {
       setResult(null);
 
       if (values.function === "faceswap") {
-        const targetBase64 = await getBase64FromUploadFile(targetFile[0]);
-        const sourceBase64 = await getBase64FromUploadFile(sourceFile[0]);
-        if (!targetBase64 || !sourceBase64) {
-          message.error("无法读取图片，请重新上传");
-          setLoading(false);
-          return;
+        const templateBase64 = await getTargetImageBase64();
+        const imageBase64 = sourceFile[PRIMARY_UPLOAD_INDEX] ? await getBase64FromUploadFile(sourceFile[PRIMARY_UPLOAD_INDEX]) : "";
+
+        if (!imageBase64) {
+          throw new Error("无法读取驱动人脸，请重新上传");
         }
-        // 火山引擎人像融合：传参对调后 template=目标图、image=驱动人脸，结果=目标图上换上驱动人脸
-        const res = await fetch(`${apiBase}/api/generate/faceswap`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            imageBase64: sourceBase64,
-            templateBase64: targetBase64,
-          }),
-        });
-        const data = await parseJsonResponse(res);
-        if (!res.ok) {
-          throw new Error((data.error as string) || "人脸替换请求失败");
-        }
-        setResult({
-          imageUrl: (data.imageUrl as string) || "",
-          message: (data.message as string) || "人脸替换完成。",
-        });
+
+        setResult(await generateFaceSwap({ imageBase64, templateBase64 }));
         message.success("生成成功！");
         return;
       }
 
       if (values.function === "fomm") {
-        const imageBase64 = await getBase64FromUploadFile(targetFile[0]);
-        if (!imageBase64) {
-          message.error("无法读取目标人脸图片，请重新上传");
-          setLoading(false);
-          return;
-        }
-        const prompt = (values.fommPrompt ?? "").trim() || "让图中人脸做自然的微笑和轻微点头动作";
-        const res = await fetch(`${apiBase}/api/generate/fomm`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ imageBase64, prompt }),
-        });
-        const data = await parseJsonResponse(res);
-        if (!res.ok) {
-          throw new Error((data.error as string) || "人脸动画请求失败");
-        }
-        setResult({
-          videoUrl: (data.videoUrl as string) || "",
-          message: (data.message as string) || "人脸动画视频生成成功。",
-        });
+        const imageBase64 = await getTargetImageBase64();
+        const prompt = values.fommPrompt?.trim() || FACE_ANIMATION_DEFAULT_PROMPT;
+
+        setResult(await generateFaceAnimation({ imageBase64, prompt }));
         message.success("生成成功！");
         return;
       }
 
-      if (values.function === "stargan") {
-        const editPrompt = (values.editPrompt ?? "").trim();
-        if (!editPrompt) {
-          message.warning("请输入编辑指令");
-          setLoading(false);
-          return;
-        }
-        const imageBase64 = await getBase64FromUploadFile(targetFile[0]);
-        if (!imageBase64) {
-          message.error("无法读取图片，请重新上传");
-          setLoading(false);
-          return;
-        }
-        const res = await fetch(`${apiBase}/api/generate/seededit`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ prompt: editPrompt, imageBase64 }),
-        });
-        const data = await parseJsonResponse(res);
-        if (!res.ok) {
-          throw new Error((data.error as string) || "属性编辑请求失败");
-        }
-        setResult({
-          imageUrl: (data.imageUrl as string) || "",
-          message: (data.message as string) || "属性编辑完成。",
-        });
-        message.success("生成成功！");
+      const prompt = values.editPrompt?.trim();
+
+      if (!prompt) {
+        message.warning("请输入编辑指令");
         return;
       }
+
+      const imageBase64 = await getTargetImageBase64();
+      setResult(await generateSeedEdit({ imageBase64, prompt }));
+      message.success("生成成功！");
     } catch (error) {
       console.error("Generate error:", error);
       message.error(error instanceof Error ? error.message : "生成失败，请重试");
@@ -219,25 +123,20 @@ const DeepfakeGeneratePage = () => {
   };
 
   const handleDownload = async () => {
-    const url = result?.videoUrl ?? result?.imageUrl;
-    if (!url) return;
+    const url = result?.videoUrl || result?.imageUrl;
+
+    if (!url) {
+      return;
+    }
 
     const values = form.getFieldsValue();
-    const functionName = values.function === "faceswap" ? "faceswap" : values.function === "fomm" ? "fomm" : "stargan";
-    const isVideo = !!result?.videoUrl;
+    const currentFunctionType = values.function || DEEPFAKE_DEFAULT_FUNCTION;
+    const isVideo = Boolean(result?.videoUrl);
+    const filename = `deepfake-${currentFunctionType}-${Date.now()}.${isVideo ? "mp4" : "jpg"}`;
 
     try {
-      message.loading("正在下载...", 0);
-      const response = await fetch(url);
-      const blob = await response.blob();
-      const blobUrl = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = blobUrl;
-      link.download = `deepfake-${functionName}-${Date.now()}.${isVideo ? "mp4" : "jpg"}`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(blobUrl);
+      message.loading("正在下载...", MESSAGE_LOADING_DURATION_FOREVER);
+      await downloadMedia(url, filename);
       message.destroy();
       message.success("下载成功！");
     } catch (error) {
@@ -249,26 +148,24 @@ const DeepfakeGeneratePage = () => {
   };
 
   const handleSave = async () => {
+    const saveUrl = result?.videoUrl || result?.imageUrl;
+
+    if (!saveUrl) {
+      return;
+    }
+
     try {
       const values = form.getFieldsValue();
-      const saveUrl = result?.videoUrl ?? result?.imageUrl;
-      if (!saveUrl) return;
-      await request.post("/data/save", {
+      const currentFunctionType = values.function || DEEPFAKE_DEFAULT_FUNCTION;
+
+      await saveGeneratedContent({
         type: result?.videoUrl ? "video" : "image",
-        title: `Deepfake ${
-          values.function === "faceswap" ? "人脸替换" : values.function === "fomm" ? "人脸动画" : "属性编辑"
-        }`,
+        title: `Deepfake ${DEEPFAKE_FUNCTION_LABELS[currentFunctionType]}`,
         url: saveUrl,
         model: values.model,
       });
-      message.success({
-        content: "内容已保存！可在内容管理中查看",
-        duration: 3,
-      });
-      // 可选：延迟跳转到内容管理页面
-      setTimeout(() => {
-        navigate("/data/output");
-      }, 1500);
+      message.success({ content: "内容已保存！可在内容管理中查看", duration: MESSAGE_DURATION_SECONDS });
+      setTimeout(() => navigate(DATA_OUTPUT_ROUTE), SAVE_NAVIGATION_DELAY_MS);
     } catch (error) {
       console.error("Save error:", error);
     }
@@ -277,7 +174,7 @@ const DeepfakeGeneratePage = () => {
   return (
     <div className="page-transition">
       <div className="page-header">
-        <Title level={2} className="page-title">
+        <Title level={TITLE_LEVEL_TWO} className="page-title">
           深度伪造人脸生成
         </Title>
         <Paragraph className="page-description">
@@ -286,243 +183,39 @@ const DeepfakeGeneratePage = () => {
         </Paragraph>
       </div>
 
-      <Row gutter={24}>
-        <Col xs={24} lg={12}>
-          <Card title="生成参数配置" bordered={false}>
-            <Form
-              form={form}
-              layout="vertical"
-              initialValues={{
-                function: "faceswap",
-                model: "FaceShifter",
-              }}
-            >
-              <Form.Item
-                label="上传目标人脸图片"
-                name="target"
-                tooltip={{
-                  title:
-                    functionType === "faceswap"
-                      ? "人脸替换的目标载体图像：保留该图的姿态与场景，仅对其人脸区域进行替换"
-                      : functionType === "fomm"
-                        ? "用于生成人脸动画的源人脸图像：该图中的人脸将按动作描述生成驱动短视频"
-                        : "待编辑的人脸图像：将根据编辑指令对该图的人脸属性进行修改，保持身份一致",
-                  placement: "right",
-                }}
-              >
-                <Upload
-                  accept="image/jpeg,image/png,image/jpg"
-                  listType="picture-card"
-                  fileList={targetFile}
-                  maxCount={1}
-                  beforeUpload={(file) => {
-                    const reader = new FileReader();
-                    reader.onload = (e) => {
-                      setTargetFile([
-                        {
-                          uid: file.uid,
-                          name: file.name,
-                          status: "done",
-                          url: e.target?.result as string,
-                          originFileObj: file,
-                        } as any,
-                      ]);
-                    };
-                    reader.readAsDataURL(file);
-                    return false;
-                  }}
-                  onRemove={() => setTargetFile([])}
-                  onPreview={handleUploadPreview}
-                >
-                  {targetFile.length === 0 && (
-                    <div>
-                      <UploadOutlined />
-                      <div style={{ marginTop: 8 }}>上传图片</div>
-                    </div>
-                  )}
-                </Upload>
-              </Form.Item>
-
-              {functionType === "faceswap" && (
-                <Form.Item
-                  label="上传驱动人脸"
-                  name="source"
-                  tooltip={{
-                    title: "提供替换人脸的源图像：其人脸身份与外观将迁移并融合至目标图的人脸区域",
-                    placement: "right",
-                  }}
-                >
-                  <Upload
-                    accept="image/jpeg,image/png,image/jpg"
-                    listType="picture-card"
-                    fileList={sourceFile}
-                    maxCount={1}
-                    beforeUpload={(file) => {
-                      const reader = new FileReader();
-                      reader.onload = (e) => {
-                        setSourceFile([
-                          {
-                            uid: file.uid,
-                            name: file.name,
-                            status: "done",
-                            url: e.target?.result as string,
-                            originFileObj: file,
-                          } as any,
-                        ]);
-                      };
-                      reader.readAsDataURL(file);
-                      return false;
-                    }}
-                    onRemove={() => setSourceFile([])}
-                    onPreview={handleUploadPreview}
-                  >
-                    {sourceFile.length === 0 && (
-                      <div>
-                        <UploadOutlined />
-                        <div style={{ marginTop: 8 }}>上传图片</div>
-                      </div>
-                    )}
-                  </Upload>
-                </Form.Item>
-              )}
-
-              {functionType === "fomm" && (
-                <Form.Item
-                  label="动作描述"
-                  name="fommPrompt"
-                  tooltip={{
-                    title: "描述希望人脸做的动作，如：微笑、点头、说话。留空则使用默认自然微动",
-                    placement: "right",
-                  }}
-                >
-                  <TextArea rows={2} placeholder="让图中人脸做自然的微笑和轻微点头动作" maxLength={300} showCount />
-                </Form.Item>
-              )}
-
-              {functionType === "stargan" && (
-                <>
-                  <Form.Item
-                    label="编辑指令"
-                    name="editPrompt"
-                    rules={[{ required: true, message: "请输入编辑指令" }]}
-                    tooltip={{
-                      title: "用自然语言描述要对图片做的修改，如：把头发改成红色、加一副眼镜、换成微笑表情",
-                      placement: "right",
-                    }}
-                  >
-                    <TextArea rows={3} placeholder="把头发改成黑色，保持人脸不变" maxLength={500} showCount />
-                  </Form.Item>
-                </>
-              )}
-
-              <Form.Item label="功能选择" name="function" rules={[{ required: true, message: "请选择功能" }]}>
-                <Radio.Group
-                  onChange={(e) => {
-                    const newType = e.target.value as FunctionType;
-                    setFunctionType(newType);
-                    form.setFieldsValue({
-                      model: modelOptions[newType][0],
-                    });
-                  }}
-                >
-                  <Space direction="vertical">
-                    <Radio value="faceswap">人脸替换（Face Swapping）</Radio>
-                    <Radio value="fomm">人脸动画（Face Reenactment）</Radio>
-                    <Radio value="stargan">属性编辑（Attribute Editing）</Radio>
-                  </Space>
-                </Radio.Group>
-              </Form.Item>
-
-              <Form.Item label="模型选择" name="model" rules={[{ required: true, message: "请选择模型" }]}>
-                <Select>
-                  {modelOptions[functionType].map((model) => (
-                    <Select.Option key={model} value={model}>
-                      {model}
-                    </Select.Option>
-                  ))}
-                </Select>
-              </Form.Item>
-
-              <Form.Item>
-                <Button
-                  type="primary"
-                  size="large"
-                  block
-                  icon={<ThunderboltOutlined />}
-                  loading={loading}
-                  onClick={handleGenerate}
-                >
-                  {loading ? "生成中..." : "开始生成"}
-                </Button>
-              </Form.Item>
-            </Form>
-          </Card>
+      <Row gutter={GRID_GUTTER}>
+        <Col xs={COL_FULL_SPAN} lg={COL_HALF_LG_SPAN}>
+          <DeepfakeGenerateForm
+            form={form}
+            functionType={functionType}
+            targetFile={targetFile}
+            sourceFile={sourceFile}
+            loading={loading}
+            setFunctionType={setFunctionType}
+            setTargetFile={setTargetFile}
+            setSourceFile={setSourceFile}
+            onPreview={handleUploadPreview}
+            onGenerate={handleGenerate}
+          />
         </Col>
 
-        <Col xs={24} lg={12}>
-          <Card title="生成结果与预览" bordered={false}>
-            {loading ? (
-              <div style={{ textAlign: "center", padding: "80px 0" }}>
-                <Spin size="large" />
-                <Paragraph style={{ marginTop: 16, color: "#666" }}>正在生成中，请稍候...</Paragraph>
-              </div>
-            ) : result ? (
-              <div>
-                {result.videoUrl ? (
-                  <video
-                    src={result.videoUrl}
-                    controls
-                    style={{ width: "100%", borderRadius: 8 }}
-                    title="人脸动画结果"
-                  />
-                ) : result.imageUrl ? (
-                  <Image
-                    src={result.imageUrl}
-                    alt="生成结果"
-                    style={{ width: "70%", borderRadius: 8 }}
-                    fallback="https://via.placeholder.com/512x512?text=Generated+Result"
-                  />
-                ) : null}
-                <Space style={{ marginTop: 16, width: "100%" }} direction="vertical">
-                  <Button type="primary" block icon={<DownloadOutlined />} onClick={handleDownload}>
-                    下载到本地
-                  </Button>
-                  <Button block onClick={handleSave}>
-                    保存到内容管理
-                  </Button>
-                  <Button block onClick={() => setResult(null)}>
-                    重新生成
-                  </Button>
-                </Space>
-              </div>
-            ) : (
-              <div
-                style={{
-                  textAlign: "center",
-                  padding: "80px 20px",
-                  background: "#fafafa",
-                  borderRadius: 8,
-                }}
-              >
-                <Paragraph style={{ color: "#999" }}>请配置参数并点击"开始生成"按钮</Paragraph>
-                <Paragraph style={{ color: "#999", fontSize: 12 }}>生成结果将在此处显示</Paragraph>
-              </div>
-            )}
-          </Card>
+        <Col xs={COL_FULL_SPAN} lg={COL_HALF_LG_SPAN}>
+          <MediaResultCard
+            title="生成结果与预览"
+            loading={loading}
+            loadingText="正在生成中，请稍候..."
+            emptyText={'请配置参数并点击"开始生成"按钮'}
+            result={result}
+            imageWidth={DEEPFAKE_RESULT_IMAGE_WIDTH}
+            videoTitle="人脸动画结果"
+            onDownload={handleDownload}
+            onSave={handleSave}
+            onReset={() => setResult(null)}
+          />
         </Col>
       </Row>
 
-      <Modal
-        title="预览"
-        open={previewOpen}
-        footer={null}
-        onCancel={() => setPreviewOpen(false)}
-        width="80%"
-        style={{ maxWidth: 800 }}
-        centered
-      >
-        {previewImageUrl && <img src={previewImageUrl} alt="预览" style={{ width: "100%", display: "block" }} />}
-      </Modal>
+      <ImagePreviewModal open={previewOpen} imageUrl={previewImageUrl} onClose={() => setPreviewOpen(false)} />
     </div>
   );
 };

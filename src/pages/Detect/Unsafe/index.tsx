@@ -1,265 +1,144 @@
 import { useState } from "react";
-import {
-  Card,
-  Upload,
-  message,
-  Spin,
-  Typography,
-  Tag,
-  Space,
-  Row,
-  Col,
-  Image,
-  Alert,
-  Button,
-  Divider,
-  List,
-  Input,
-  Tabs,
-  Select,
-} from "antd";
-import { apiBase } from "@/utils/apiBase";
-import {
-  UploadOutlined,
-  WarningOutlined,
-  CheckCircleOutlined,
-  ExclamationCircleOutlined,
-  SafetyOutlined,
-  DownloadOutlined,
-  LinkOutlined,
-  PictureOutlined,
-  VideoCameraOutlined,
-  EyeOutlined,
-} from "@ant-design/icons";
+import { Col, message, Row, Select, Tabs, Typography } from "antd";
+import { PictureOutlined, VideoCameraOutlined } from "@ant-design/icons";
 import type { UploadFile, UploadProps } from "antd";
 
-const { Title, Paragraph, Text } = Typography;
-const { Dragger } = Upload;
+import { ImageDetectInputCard } from "@/components/Detect/common/ImageDetectInputCard";
+import { VideoInputCard } from "@/components/Detect/common/VideoInputCard";
+import { UnsafeDetectResultCard, RISK_CONFIG } from "@/components/Detect/Unsafe/UnsafeDetectResultCard";
+import {
+  DEFAULT_UNSAFE_MODEL,
+  DETECT_STEP_INPUT,
+  DETECT_STEP_READY,
+  DETECT_STEP_RESULT,
+  EMPTY_SELECTION_COUNT,
+  SAFETY_DETECTION_MODELS,
+  VIOLATION_LABELS,
+} from "@/constants/detect";
+import {
+  COL_FULL_SPAN,
+  COL_HALF_LG_SPAN,
+  FULL_WIDTH,
+  GRID_GUTTER,
+  SCROLL_AFTER_RESULT_DELAY_MS,
+  TITLE_LEVEL_TWO,
+} from "@/constants/ui";
+import { detectUnsafeImage, detectUnsafeVideo } from "@/services/detect";
+import type { IDetectMediaBody, IUnsafeDetectionResult, TDetectContentKind, TDetectInputTab } from "@/typings/detect";
+import { assertValidUrl, createImageDetectBody, createRemoteUploadFile, createUnsafeReport } from "@/utils/detect";
+import { downloadTextFile } from "@/utils/media";
+import { getBase64FromUploadFile } from "@/utils/media";
 
-// 可选的检测模型
-const SAFETY_DETECTION_MODELS = [
-  { value: "Google-SafeSearch", label: "Google SafeSearch" },
-  { value: "AWS-Rekognition", label: "AWS Rekognition" },
-  { value: "Azure-ContentModerator", label: "Azure Content Moderator" },
-  { value: "NSFW-Detector", label: "NSFW Detector" },
-];
-
-type RiskLevel = "low" | "medium" | "high";
-
-interface DetectionResult {
-  violations: string[];
-  risk: RiskLevel;
-  riskScore: number;
-  suggestions: string[];
-  details: {
-    [key: string]: {
-      score: number;
-      regions?: Array<{
-        x: number;
-        y: number;
-        width: number;
-        height: number;
-      }>;
-    };
-  };
-}
-
-const violationLabels: Record<string, string> = {
-  violence: "暴力内容",
-  sensitive: "敏感内容",
-  sexual: "色情内容",
-  hate: "仇恨符号",
-  drugs: "毒品相关",
-  gambling: "赌博内容",
-};
-
-const riskConfig: Record<RiskLevel, { color: string; text: string; icon: React.ReactNode }> = {
-  low: {
-    color: "#52c41a",
-    text: "低风险",
-    icon: <CheckCircleOutlined />,
-  },
-  medium: {
-    color: "#faad14",
-    text: "中风险",
-    icon: <ExclamationCircleOutlined />,
-  },
-  high: {
-    color: "#ff4d4f",
-    text: "高风险",
-    icon: <WarningOutlined />,
-  },
-};
+const { Title, Paragraph } = Typography;
 
 const UnsafeDetectPage = () => {
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<DetectionResult | null>(null);
+  const [result, setResult] = useState<IUnsafeDetectionResult | null>(null);
   const [uploadedFile, setUploadedFile] = useState<UploadFile | null>(null);
-  const [previewUrl, setPreviewUrl] = useState<string>("");
-  const [urlInput, setUrlInput] = useState<string>("");
-  const [contentKind, setContentKind] = useState<"image" | "video">("image"); // 顶层 Tab：图片敏感检测 | 视频敏感检测
-  const [activeTab, setActiveTab] = useState<string>("upload");
-  const [selectedModels, setSelectedModels] = useState<string[]>(["Google-SafeSearch"]);
-  const [currentStep, setCurrentStep] = useState<number>(1); // 1: 上传, 2: 选择方法, 3: 检测结果
-  // 视频 Tab 专用
-  const [videoUploadedUrl, setVideoUploadedUrl] = useState<string>("");
+  const [previewUrl, setPreviewUrl] = useState("");
+  const [urlInput, setUrlInput] = useState("");
+  const [contentKind, setContentKind] = useState<TDetectContentKind>("image");
+  const [activeTab, setActiveTab] = useState<TDetectInputTab>("upload");
+  const [selectedModels, setSelectedModels] = useState<string[]>([DEFAULT_UNSAFE_MODEL]);
+  const [currentStep, setCurrentStep] = useState(DETECT_STEP_INPUT);
   const [videoFile, setVideoFile] = useState<File | null>(null);
-  const [videoUrlInput, setVideoUrlInput] = useState<string>("");
-  const [videoPreviewUrl, setVideoPreviewUrl] = useState<string>("");
-  const [videoUploadFileName, setVideoUploadFileName] = useState<string>("");
-  const [videoInputTab, setVideoInputTab] = useState<"upload" | "url">("upload");
+  const [videoUrlInput, setVideoUrlInput] = useState("");
+  const [videoPreviewUrl, setVideoPreviewUrl] = useState("");
+  const [videoUploadFileName, setVideoUploadFileName] = useState("");
+  const [videoInputTab, setVideoInputTab] = useState<TDetectInputTab>("upload");
 
-  const fileToBase64 = (file: File): Promise<string> =>
-    new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => {
-        const dataUrl = reader.result as string;
-        const base64 = dataUrl.indexOf(",") >= 0 ? dataUrl.split(",")[1] : dataUrl;
-        resolve(base64 || "");
-      };
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
-    });
-
-  const handleUpload: UploadProps["customRequest"] = async (options) => {
-    const { file } = options;
-    const uploadFile = file as File;
-
-    try {
-      setUploadedFile(file as any);
-      // 创建预览 URL
-      const url = URL.createObjectURL(uploadFile);
-      setPreviewUrl(url);
-      setCurrentStep(2); // 上传成功后进入选择检测方法步骤
-      message.success("文件上传成功，请选择检测方法");
-    } catch (error) {
-      console.error("Upload error:", error);
-      message.error("上传失败，请重试");
-    }
+  const scrollToResult = () => {
+    setTimeout(() => window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" }), SCROLL_AFTER_RESULT_DELAY_MS);
   };
 
-  const handleUrlLoad = async () => {
-    if (!urlInput.trim()) {
+  const resetDetection = () => {
+    setResult(null);
+    setCurrentStep(DETECT_STEP_INPUT);
+
+    if (contentKind === "video") {
+      setVideoUrlInput("");
+      setVideoPreviewUrl("");
+      setVideoUploadFileName("");
+      setVideoFile(null);
+      return;
+    }
+
+    setUploadedFile(null);
+    setPreviewUrl("");
+    setUrlInput("");
+    setSelectedModels([DEFAULT_UNSAFE_MODEL]);
+  };
+
+  const handleImageUpload: UploadProps["customRequest"] = async ({ file }) => {
+    const uploadFile = file as File;
+
+    if (!uploadFile.type.startsWith("image/")) {
+      message.warning("当前仅支持图片检测，请上传图片（JPG、PNG 等）");
+      return;
+    }
+
+    setUploadedFile({
+      uid: uploadFile.name,
+      name: uploadFile.name,
+      status: "done",
+      originFileObj: uploadFile as UploadFile["originFileObj"],
+    });
+    setPreviewUrl(URL.createObjectURL(uploadFile));
+    setCurrentStep(DETECT_STEP_READY);
+    message.success("文件上传成功，请选择检测方法");
+  };
+
+  const handleUrlLoad = () => {
+    const nextUrl = urlInput.trim();
+
+    if (!nextUrl) {
       message.warning("请输入URL地址");
       return;
     }
 
-    // 验证URL格式
     try {
-      new URL(urlInput);
-    } catch {
-      message.error("URL格式不正确，请输入有效的URL");
-      return;
-    }
-
-    try {
-      setLoading(true);
-      // 这里可以实际调用API来获取远程文件
-      // 暂时使用URL作为预览
-      setPreviewUrl(urlInput);
-      setUploadedFile({
-        uid: "-1",
-        name: urlInput.split("/").pop() || "remote-file",
-        status: "done",
-        url: urlInput,
-      } as UploadFile);
-      setCurrentStep(2); // URL加载成功后进入选择检测方法步骤
+      assertValidUrl(nextUrl, "URL格式不正确，请输入有效的URL");
+      setPreviewUrl(nextUrl);
+      setUploadedFile(createRemoteUploadFile(nextUrl));
+      setCurrentStep(DETECT_STEP_READY);
       message.success("URL加载成功，请选择检测方法");
     } catch (error) {
-      console.error("URL load error:", error);
-      message.error("URL加载失败，请检查地址是否正确");
-    } finally {
-      setLoading(false);
+      message.error(error instanceof Error ? error.message : "URL加载失败，请检查地址是否正确");
     }
   };
 
-  const handleVideoUrlLoad = () => {
-    const url = videoUrlInput.trim();
-    if (!url) {
-      message.warning("请输入视频 URL");
-      return;
-    }
-    try {
-      new URL(url);
-    } catch {
-      message.error("URL 格式不正确");
-      return;
-    }
-    setVideoFile(null);
-    setVideoUploadedUrl(url);
-    setVideoPreviewUrl(url);
-    setVideoUploadFileName(url.split("/").pop() || "视频");
-    setCurrentStep(2);
-    message.success("已加载视频地址，可开始检测");
-  };
-
-  const handleVideoUpload: UploadProps["customRequest"] = async (options) => {
-    const file = options.file as File;
-    if (!file.type.startsWith("video/")) {
-      message.error("请选择视频文件（如 MP4）");
-      return;
-    }
+  const handleVideoFileChange = (file: File) => {
     setVideoFile(file);
     setVideoPreviewUrl(URL.createObjectURL(file));
     setVideoUploadFileName(file.name || "视频");
-    setVideoUploadedUrl("");
-    setCurrentStep(2);
+    setVideoUrlInput("");
+    setCurrentStep(DETECT_STEP_READY);
     message.success("视频已选择，将使用 Base64 直接检测");
-    return;
+  };
+
+  const handleVideoUrlLoad = () => {
+    const nextUrl = videoUrlInput.trim();
+
+    if (!nextUrl) {
+      message.warning("请输入视频 URL");
+      return;
+    }
+
+    try {
+      assertValidUrl(nextUrl, "URL 格式不正确");
+      setVideoFile(null);
+      setVideoPreviewUrl(nextUrl);
+      setVideoUploadFileName(nextUrl.split("/").pop() || "视频");
+      setCurrentStep(DETECT_STEP_READY);
+      message.success("已加载视频地址，可开始检测");
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : "URL 格式不正确");
+    }
   };
 
   const handleDetect = async () => {
     if (contentKind === "video") {
-      const hasUrl = !!videoUploadedUrl;
-      const hasFile = !!videoFile;
-      if (!hasUrl && !hasFile) {
-        message.warning("请先上传视频或输入视频 URL 并加载");
-        return;
-      }
-      try {
-        setLoading(true);
-        setResult(null);
-        const body: { videoUrl?: string; videoBase64?: string } = {};
-        if (hasFile && videoFile) {
-          body.videoBase64 = await fileToBase64(videoFile);
-        } else {
-          body.videoUrl = videoUploadedUrl;
-        }
-        const res = await fetch(`${apiBase}/api/detect/volc-video-ims`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || "视频敏感检测失败");
-        const safe = data.safe === true;
-        const suggestion = (data.suggestion || "pass").toLowerCase();
-        const labels: string[] = Array.isArray(data.labels) ? data.labels : [];
-        const reason = data.reason || "";
-        const risk: RiskLevel = suggestion === "block" ? "high" : suggestion === "review" ? "medium" : "low";
-        const riskScore = safe ? 10 : suggestion === "block" ? 80 : 50;
-        const suggestions: string[] = safe
-          ? ["内容安全，可以正常发布", reason || "未检测到违规内容"]
-          : [reason || "建议人工复审", ...labels.map((l: string) => `违规类型：${l}`)];
-        const details: DetectionResult["details"] = {};
-        labels.forEach((l: string) => {
-          details[l] = { score: suggestion === "block" ? 0.9 : 0.6 };
-        });
-        setResult({
-          violations: labels,
-          risk,
-          riskScore,
-          suggestions,
-          details,
-        });
-        setCurrentStep(3);
-        message.success("视频敏感检测完成");
-        setTimeout(() => window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" }), 100);
-      } catch (error) {
-        message.error(error instanceof Error ? error.message : "检测失败，请重试");
-      } finally {
-        setLoading(false);
-      }
+      await handleVideoDetect();
       return;
     }
 
@@ -267,7 +146,8 @@ const UnsafeDetectPage = () => {
       message.warning("请先上传文件");
       return;
     }
-    if (selectedModels.length === 0) {
+
+    if (selectedModels.length === EMPTY_SELECTION_COUNT) {
       message.warning("请至少选择一个检测模型");
       return;
     }
@@ -275,59 +155,10 @@ const UnsafeDetectPage = () => {
     try {
       setLoading(true);
       setResult(null);
-
-      let detectionResult: DetectionResult;
-
-      // 图片敏感检测：使用多模态图片理解
-      const body: { imageUrl?: string; imageBase64?: string } = {};
-      if (activeTab === "url" && urlInput.trim()) {
-        body.imageUrl = urlInput.trim();
-      } else {
-        const rawFile = (uploadedFile as UploadFile).originFileObj ?? (uploadedFile as unknown as File);
-        if (rawFile instanceof File) {
-          body.imageBase64 = await fileToBase64(rawFile);
-        } else {
-          message.error("无法读取图片，请重新上传");
-          setLoading(false);
-          return;
-        }
-      }
-      const res = await fetch(`${apiBase}/api/detect/volc-ims`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || "图片敏感检测失败");
-      }
-      const safe = data.safe === true;
-      const suggestion = (data.suggestion || "pass").toLowerCase();
-      const labels: string[] = Array.isArray(data.labels) ? data.labels : [];
-      const reason = data.reason || "";
-      const risk: RiskLevel = suggestion === "block" ? "high" : suggestion === "review" ? "medium" : "low";
-      const riskScore = safe ? Math.min(20, 5 + labels.length * 2) : suggestion === "block" ? 80 : 50;
-      const suggestions: string[] = safe
-        ? ["内容安全，可以正常发布", reason || "未检测到违规内容"]
-        : [reason || "建议人工复审", ...labels.map((l: string) => `违规类型：${l}`)];
-      const details: DetectionResult["details"] = {};
-      labels.forEach((l: string) => {
-        details[l] = { score: suggestion === "block" ? 0.9 : 0.6 };
-      });
-      detectionResult = {
-        violations: labels,
-        risk,
-        riskScore,
-        suggestions,
-        details,
-      };
-
-      setResult(detectionResult);
-      setCurrentStep(3);
+      setResult(await detectUnsafeImage(await createImageDetectBody(activeTab, uploadedFile, urlInput)));
+      setCurrentStep(DETECT_STEP_RESULT);
       message.success(`检测完成（${selectedModels.join(", ")}）`);
-      setTimeout(() => {
-        window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
-      }, 100);
+      scrollToResult();
     } catch (error) {
       console.error("Detection error:", error);
       message.error(error instanceof Error ? error.message : "检测失败，请重试");
@@ -336,96 +167,69 @@ const UnsafeDetectPage = () => {
     }
   };
 
-  const uploadProps: UploadProps = {
-    name: "file",
-    multiple: false,
-    customRequest: handleUpload,
-    showUploadList: false,
-    accept: "image/*",
-  };
+  const handleVideoDetect = async () => {
+    if (!videoPreviewUrl && !videoFile && !videoUrlInput.trim()) {
+      message.warning("请先上传视频或输入视频 URL 并加载");
+      return;
+    }
 
-  const resetDetection = () => {
-    setResult(null);
-    setCurrentStep(1);
-    if (contentKind === "video") {
-      setVideoUploadedUrl("");
-      setVideoUrlInput("");
-      setVideoPreviewUrl("");
-      setVideoUploadFileName("");
-    } else {
-      setUploadedFile(null);
-      setPreviewUrl("");
-      setUrlInput("");
-      setSelectedModels(["Google-SafeSearch"]);
+    try {
+      setLoading(true);
+      setResult(null);
+      const body: IDetectMediaBody = {};
+
+      if (videoFile) {
+        body.videoBase64 = await getBase64FromUploadFile({
+          uid: videoFile.name,
+          name: videoFile.name,
+          status: "done",
+          originFileObj: videoFile as UploadFile["originFileObj"],
+        });
+      } else {
+        const nextUrl = videoPreviewUrl || videoUrlInput.trim();
+        assertValidUrl(nextUrl, "URL 格式不正确");
+        body.videoUrl = nextUrl;
+        setVideoPreviewUrl(nextUrl);
+      }
+
+      setResult(await detectUnsafeVideo(body));
+      setCurrentStep(DETECT_STEP_RESULT);
+      message.success("视频敏感检测完成");
+      scrollToResult();
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : "检测失败，请重试");
+    } finally {
+      setLoading(false);
     }
   };
 
   const handleDownloadReport = () => {
-    if (!result) return;
+    if (!result) {
+      return;
+    }
 
-    // 创建不安全内容检测报告
-    const reportContent = `
-不安全内容检测报告
-==================
-
-检测时间：${new Date().toLocaleString("zh-CN")}
-文件名称：${contentKind === "video" ? videoUploadFileName || "视频" : uploadedFile?.name || "未知"}
-
-检测结果
---------
-风险等级：${riskConfig[result.risk].text}
-风险评分：${result.riskScore}/100
-
-${
-  result.violations.length > 0
-    ? `
-检测到的违规类型
-----------------
-${result.violations.map((v, i) => `${i + 1}. ${violationLabels[v] || v}`).join("\n")}
-
-详细分析
---------
-${Object.entries(result.details)
-  .map(([key, value]) => {
-    return `${violationLabels[key] || key}：${Math.round(value.score * 100)}%${
-      value.regions && value.regions.length > 0 ? ` (检测到 ${value.regions.length} 处可疑区域)` : ""
-    }`;
-  })
-  .join("\n")}
-`
-    : `
-内容安全状态
-------------
-未检测到违规内容，内容安全。
-`
-}
-
-处理建议
---------
-${result.suggestions.map((s, i) => `${i + 1}. ${s}`).join("\n")}
-
----
-此报告由 AIGC 安全性研究与工具平台自动生成
-`;
-
-    // 创建并下载文本文件
-    const blob = new Blob([reportContent], { type: "text/plain;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `unsafe-detection-report-${Date.now()}.txt`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-
+    const reportContent = createUnsafeReport({
+      result,
+      filename: contentKind === "video" ? videoUploadFileName || "视频" : uploadedFile?.name || "未知",
+      riskText: RISK_CONFIG[result.risk].text,
+      violationLabels: VIOLATION_LABELS,
+    });
+    downloadTextFile(reportContent, `unsafe-detection-report-${Date.now()}.txt`);
     message.success("检测报告已下载！");
+  };
+
+  const uploadProps: UploadProps = {
+    name: "file",
+    multiple: false,
+    customRequest: handleImageUpload,
+    showUploadList: false,
+    accept: "image/*",
   };
 
   return (
     <div className="page-transition">
       <div className="page-header">
-        <Title level={2} className="page-title">
+        <Title level={TITLE_LEVEL_TWO} className="page-title">
           不安全内容检测
         </Title>
         <Paragraph className="page-description">
@@ -435,23 +239,13 @@ ${result.suggestions.map((s, i) => `${i + 1}. ${s}`).join("\n")}
 
       <Tabs
         activeKey={contentKind}
-        onChange={(k) => {
-          setContentKind(k as "image" | "video");
+        onChange={(key) => {
+          setContentKind(key as TDetectContentKind);
           setResult(null);
-          setCurrentStep(1);
-          if (k === "video") {
-            setVideoUploadedUrl("");
-            setVideoUrlInput("");
-            setVideoPreviewUrl("");
-            setVideoUploadFileName("");
-          } else {
-            setUploadedFile(null);
-            setPreviewUrl("");
-            setUrlInput("");
-          }
+          setCurrentStep(DETECT_STEP_INPUT);
         }}
         size="large"
-        style={{ marginBottom: 24 }}
+        style={{ marginBottom: GRID_GUTTER }}
         items={[
           {
             key: "image",
@@ -461,388 +255,53 @@ ${result.suggestions.map((s, i) => `${i + 1}. ${s}`).join("\n")}
               </span>
             ),
             children: (
-              <Row gutter={24}>
-                <Col xs={24} lg={12}>
-                  <Card title="上传待检测内容" bordered={false}>
-                    <Tabs
-                      activeKey={activeTab}
-                      onChange={setActiveTab}
-                      items={[
-                        {
-                          key: "upload",
-                          label: (
-                            <span>
-                              <UploadOutlined /> 本地上传
-                            </span>
-                          ),
-                          children: (
-                            <>
-                              {!uploadedFile && (
-                                <Dragger {...uploadProps} style={{ padding: "40px 20px" }}>
-                                  <p className="ant-upload-drag-icon">
-                                    <UploadOutlined style={{ fontSize: 48, color: "#1890ff" }} />
-                                  </p>
-                                  <p className="ant-upload-text" style={{ fontSize: 18 }}>
-                                    点击或拖拽文件到此区域上传
-                                  </p>
-                                  <p className="ant-upload-hint">支持图片（JPG、PNG 等）</p>
-                                </Dragger>
-                              )}
-
-                              {uploadedFile &&
-                                previewUrl &&
-                                activeTab === "upload" &&
-                                !(currentStep === 2 && !result) && (
-                                  <div className="image-preview-wrap" style={{ borderRadius: 8 }}>
-                                    <Image
-                                      src={previewUrl}
-                                      alt="上传的内容"
-                                      style={{ width: "100%", borderRadius: 8 }}
-                                      preview={{ mask: null }}
-                                    />
-                                    <div className="image-preview-mask">
-                                      <EyeOutlined style={{ fontSize: 24 }} />
-                                      <span>预览</span>
-                                    </div>
-                                  </div>
-                                )}
-                            </>
-                          ),
-                        },
-                        {
-                          key: "url",
-                          label: (
-                            <span>
-                              <LinkOutlined /> URL解析
-                            </span>
-                          ),
-                          children: (
-                            <>
-                              <Space.Compact style={{ width: "100%", marginBottom: 16 }}>
-                                <Input
-                                  size="large"
-                                  placeholder="https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=768"
-                                  value={urlInput}
-                                  onChange={(e) => setUrlInput(e.target.value)}
-                                  onPressEnter={handleUrlLoad}
-                                  disabled={loading}
-                                />
-                                <Button
-                                  type="primary"
-                                  size="large"
-                                  onClick={handleUrlLoad}
-                                  loading={loading}
-                                  icon={<LinkOutlined />}
-                                >
-                                  加载
-                                </Button>
-                              </Space.Compact>
-
-                              {uploadedFile && previewUrl && activeTab === "url" && !(currentStep === 2 && !result) && (
-                                <div className="image-preview-wrap" style={{ borderRadius: 8 }}>
-                                  <Image
-                                    src={previewUrl}
-                                    alt="URL内容"
-                                    style={{ width: "100%", borderRadius: 8 }}
-                                    preview={{ mask: null }}
-                                  />
-                                  <div className="image-preview-mask">
-                                    <EyeOutlined style={{ fontSize: 24 }} />
-                                    <span>预览</span>
-                                  </div>
-                                </div>
-                              )}
-                            </>
-                          ),
-                        },
-                      ]}
-                    />
-
-                    {/* 步骤2：上传预览、模型选择、操作按钮纵向排列 */}
-                    {contentKind === "image" && currentStep === 2 && uploadedFile && previewUrl && !result && (
-                      <Space direction="vertical" size={16} style={{ width: "100%", marginTop: 20 }}>
-                        <div
-                          style={{
-                            minHeight: 260,
-                            maxHeight: 360,
-                            borderRadius: 12,
-                            overflow: "hidden",
-                            background: "linear-gradient(145deg, #f8f9fa 0%, #f1f3f5 100%)",
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            padding: 12,
-                            border: "1px solid #e9ecef",
-                          }}
-                        >
-                          <div className="image-preview-wrap" style={{ maxWidth: "100%", maxHeight: 336 }}>
-                            <Image
-                              src={previewUrl}
-                              alt="待检测图片"
-                              style={{
-                                maxWidth: "100%",
-                                maxHeight: 336,
-                                objectFit: "contain",
-                                borderRadius: 8,
-                              }}
-                              preview={{ mask: null }}
-                            />
-                            <div className="image-preview-mask">
-                              <EyeOutlined style={{ fontSize: 24 }} />
-                              <span>预览</span>
-                            </div>
-                          </div>
-                        </div>
-                        <Card
-                          title="选择检测模型/API"
-                          size="small"
-                          bordered={false}
-                          style={{
-                            borderRadius: 12,
-                            background: "#fafbfc",
-                            border: "1px solid #e9ecef",
-                            boxShadow: "0 1px 2px rgba(0,0,0,0.04)",
-                          }}
-                          bodyStyle={{ padding: "16px 20px" }}
-                        >
-                          <Select
-                            mode="multiple"
-                            size="large"
-                            value={selectedModels}
-                            onChange={setSelectedModels}
-                            optionLabelProp="label"
-                            placeholder="请选择检测模型/API"
-                            style={{ width: "100%" }}
-                          >
-                            {SAFETY_DETECTION_MODELS.map((model) => (
-                              <Select.Option key={model.value} value={model.value} label={model.label}>
-                                {model.label}
-                              </Select.Option>
-                            ))}
-                          </Select>
-                        </Card>
-                        <Space direction="vertical" style={{ width: "100%" }} size={12}>
-                          <Button
-                            type="primary"
-                            size="large"
-                            block
-                            icon={<SafetyOutlined />}
-                            onClick={handleDetect}
-                            loading={loading}
-                            disabled={loading || selectedModels.length === 0}
-                            style={{ height: 44, borderRadius: 8 }}
-                          >
-                            {loading ? "检测中..." : `使用 ${selectedModels.length} 个模型开始检测`}
-                          </Button>
-                          <Button
-                            block
-                            icon={<UploadOutlined />}
-                            onClick={resetDetection}
-                            disabled={loading}
-                            style={{ borderRadius: 8 }}
-                          >
-                            重新上传
-                          </Button>
-                        </Space>
-                      </Space>
-                    )}
-
-                    {/* 已有结果或非步骤2时：显示重新检测/重新上传 */}
-                    {!(contentKind === "image" && currentStep === 2 && uploadedFile && !result) && (
-                      <Space direction="vertical" style={{ width: "100%", marginTop: 16 }} size={12}>
-                        {contentKind === "image" && currentStep === 3 && result && (
-                          <Button
-                            type="primary"
-                            size="large"
-                            block
-                            icon={<SafetyOutlined />}
-                            onClick={handleDetect}
-                            loading={loading}
-                            disabled={loading}
-                            style={{ borderRadius: 8 }}
-                          >
-                            重新检测
-                          </Button>
-                        )}
-                        <Button
-                          block
-                          icon={<UploadOutlined />}
-                          onClick={resetDetection}
-                          disabled={loading}
-                          style={{ borderRadius: 8 }}
-                        >
-                          重新上传
-                        </Button>
-                      </Space>
-                    )}
-                  </Card>
+              <Row gutter={GRID_GUTTER}>
+                <Col xs={COL_FULL_SPAN} lg={COL_HALF_LG_SPAN}>
+                  <ImageDetectInputCard
+                    title="上传待检测内容"
+                    activeTab={activeTab}
+                    loading={loading}
+                    uploadedFile={uploadedFile}
+                    previewUrl={previewUrl}
+                    currentStep={currentStep}
+                    hasResult={Boolean(result)}
+                    urlInput={urlInput}
+                    uploadHint="支持图片（JPG、PNG 等）"
+                    uploadProps={uploadProps}
+                    onActiveTabChange={setActiveTab}
+                    onUrlInputChange={setUrlInput}
+                    onUrlLoad={handleUrlLoad}
+                    onDetect={handleDetect}
+                    onReset={resetDetection}
+                    detectButtonText={`使用 ${selectedModels.length} 个模型开始检测`}
+                    detectButtonDisabled={selectedModels.length === EMPTY_SELECTION_COUNT}
+                    modelSelector={
+                      <Select
+                        mode="multiple"
+                        size="large"
+                        value={selectedModels}
+                        onChange={setSelectedModels}
+                        optionLabelProp="label"
+                        placeholder="请选择检测模型/API"
+                        style={{ width: FULL_WIDTH }}
+                      >
+                        {SAFETY_DETECTION_MODELS.map((model) => (
+                          <Select.Option key={model.value} value={model.value} label={model.label}>
+                            {model.label}
+                          </Select.Option>
+                        ))}
+                      </Select>
+                    }
+                  />
                 </Col>
-
-                <Col xs={24} lg={12}>
-                  <Card title="检测结果" bordered={false}>
-                    {!result && !loading && (
-                      <div
-                        style={{
-                          textAlign: "center",
-                          padding: "80px 20px",
-                          background: "#fafafa",
-                          borderRadius: 8,
-                        }}
-                      >
-                        <SafetyOutlined style={{ fontSize: 64, color: "#d9d9d9", marginBottom: 16 }} />
-                        <Paragraph style={{ color: "#999", marginBottom: 8 }}>等待上传文件</Paragraph>
-                        <Text type="secondary" style={{ fontSize: 12 }}>
-                          上传后将显示安全检测结果
-                        </Text>
-                      </div>
-                    )}
-
-                    {loading && (
-                      <div
-                        style={{
-                          textAlign: "center",
-                          padding: "80px 20px",
-                          background: "#fafafa",
-                          borderRadius: 8,
-                        }}
-                      >
-                        <Spin size="large" />
-                        <Paragraph style={{ marginTop: 16, color: "#666" }}>检测中...</Paragraph>
-                      </div>
-                    )}
-
-                    {result && !loading && (
-                      <div>
-                        <Alert
-                          message="安全检测已完成"
-                          description={`检测到 ${result.violations.length} 个违规类型，风险等级：${
-                            riskConfig[result.risk].text
-                          }`}
-                          type={result.risk === "low" ? "success" : result.risk === "medium" ? "warning" : "error"}
-                          showIcon
-                          style={{ marginBottom: 16 }}
-                        />
-                        <Space direction="vertical" size="large" style={{ width: "100%" }}>
-                          <div
-                            style={{
-                              textAlign: "center",
-                              padding: "20px",
-                              background: `${riskConfig[result.risk].color}15`,
-                              borderRadius: 8,
-                            }}
-                          >
-                            <div
-                              style={{
-                                fontSize: 64,
-                                color: riskConfig[result.risk].color,
-                              }}
-                            >
-                              {riskConfig[result.risk].icon}
-                            </div>
-                            <Title
-                              level={3}
-                              style={{
-                                color: riskConfig[result.risk].color,
-                                marginTop: 16,
-                                marginBottom: 8,
-                              }}
-                            >
-                              {riskConfig[result.risk].text}
-                            </Title>
-                            <Text style={{ fontSize: 16 }}>风险评分：{result.riskScore}/100</Text>
-                          </div>
-
-                          {result.violations.length > 0 && (
-                            <>
-                              <Divider />
-                              <div>
-                                <Text strong style={{ fontSize: 16 }}>
-                                  检测到的违规类型
-                                </Text>
-                                <div style={{ marginTop: 12 }}>
-                                  {result.violations.map((violation) => (
-                                    <Tag
-                                      key={violation}
-                                      color="red"
-                                      style={{
-                                        fontSize: 14,
-                                        padding: "4px 12px",
-                                        marginBottom: 8,
-                                      }}
-                                    >
-                                      {violationLabels[violation] || violation}
-                                    </Tag>
-                                  ))}
-                                </div>
-                              </div>
-
-                              <div>
-                                <Text strong style={{ fontSize: 16 }}>
-                                  详细分析
-                                </Text>
-                                <List
-                                  style={{ marginTop: 12 }}
-                                  size="small"
-                                  bordered
-                                  dataSource={Object.entries(result.details)}
-                                  renderItem={([key, value]) => (
-                                    <List.Item>
-                                      <Space direction="vertical" style={{ width: "100%" }}>
-                                        <div
-                                          style={{
-                                            display: "flex",
-                                            justifyContent: "space-between",
-                                          }}
-                                        >
-                                          <Text strong>{violationLabels[key] || key}</Text>
-                                          <Text type="danger">{Math.round(value.score * 100)}%</Text>
-                                        </div>
-                                        {value.regions && value.regions.length > 0 && (
-                                          <Text type="secondary" style={{ fontSize: 12 }}>
-                                            检测到 {value.regions.length} 处可疑区域
-                                          </Text>
-                                        )}
-                                      </Space>
-                                    </List.Item>
-                                  )}
-                                />
-                              </div>
-                            </>
-                          )}
-
-                          {result.suggestions.length > 0 && (
-                            <>
-                              <Divider />
-                              <div>
-                                <Text strong style={{ fontSize: 16 }}>
-                                  整改建议
-                                </Text>
-                                <List
-                                  style={{ marginTop: 12 }}
-                                  size="small"
-                                  dataSource={result.suggestions}
-                                  renderItem={(item, index) => (
-                                    <List.Item>
-                                      <Space>
-                                        <Tag color="orange">{index + 1}</Tag>
-                                        <Text>{item}</Text>
-                                      </Space>
-                                    </List.Item>
-                                  )}
-                                />
-                              </div>
-                            </>
-                          )}
-
-                          <Space style={{ width: "100%" }} direction="vertical">
-                            <Button type="primary" block icon={<DownloadOutlined />} onClick={handleDownloadReport}>
-                              下载检测报告
-                            </Button>
-                          </Space>
-                        </Space>
-                      </div>
-                    )}
-                  </Card>
+                <Col xs={COL_FULL_SPAN} lg={COL_HALF_LG_SPAN}>
+                  <UnsafeDetectResultCard
+                    loading={loading}
+                    result={result}
+                    emptyTitle="等待上传文件"
+                    emptyDescription="上传后将显示安全检测结果"
+                    onDownloadReport={handleDownloadReport}
+                  />
                 </Col>
               </Row>
             ),
@@ -855,252 +314,33 @@ ${result.suggestions.map((s, i) => `${i + 1}. ${s}`).join("\n")}
               </span>
             ),
             children: (
-              <Row gutter={24}>
-                <Col xs={24} lg={12}>
-                  <Card title="上传待检测视频" bordered={false}>
-                    <Tabs
-                      activeKey={videoInputTab}
-                      onChange={(k) => setVideoInputTab(k as "upload" | "url")}
-                      items={[
-                        {
-                          key: "upload",
-                          label: (
-                            <span>
-                              <UploadOutlined /> 本地上传
-                            </span>
-                          ),
-                          children: (
-                            <>
-                              {!videoUploadedUrl && !videoFile && (
-                                <Dragger
-                                  accept="video/*"
-                                  customRequest={handleVideoUpload}
-                                  showUploadList={false}
-                                  style={{ padding: "24px 16px", position: "relative" }}
-                                >
-                                  <p className="ant-upload-drag-icon">
-                                    <UploadOutlined style={{ fontSize: 48, color: "#1890ff" }} />
-                                  </p>
-                                  <p className="ant-upload-text">点击或拖拽视频到此区域</p>
-                                  <p className="ant-upload-hint">选择后将使用 Base64 直接检测，建议 ≤20MB</p>
-                                </Dragger>
-                              )}
-                              {(videoUploadedUrl || videoFile) && videoPreviewUrl && (
-                                <video
-                                  src={videoPreviewUrl}
-                                  controls
-                                  style={{ width: "100%", borderRadius: 8 }}
-                                  title={videoUploadFileName}
-                                />
-                              )}
-                            </>
-                          ),
-                        },
-                        {
-                          key: "url",
-                          label: (
-                            <span>
-                              <LinkOutlined /> 视频 URL
-                            </span>
-                          ),
-                          children: (
-                            <>
-                              <Space.Compact style={{ width: "100%", marginBottom: 16 }}>
-                                <Input
-                                  size="large"
-                                  placeholder="https://example.com/video.mp4"
-                                  value={videoUrlInput}
-                                  onChange={(e) => setVideoUrlInput(e.target.value)}
-                                  onPressEnter={handleVideoUrlLoad}
-                                  disabled={loading}
-                                />
-                                <Button
-                                  type="primary"
-                                  size="large"
-                                  onClick={handleVideoUrlLoad}
-                                  icon={<LinkOutlined />}
-                                >
-                                  加载
-                                </Button>
-                              </Space.Compact>
-                              {(videoUploadedUrl || videoFile) && videoPreviewUrl && videoInputTab === "url" && (
-                                <video src={videoPreviewUrl} controls style={{ width: "100%", borderRadius: 8 }} />
-                              )}
-                            </>
-                          ),
-                        },
-                      ]}
-                    />
-                    <Paragraph type="secondary" style={{ marginTop: 12, fontSize: 12 }}>
-                      本地上传使用 Base64 直接检测（建议 ≤20MB）；也可输入视频 URL 后加载检测。
-                    </Paragraph>
-                    <Space direction="vertical" style={{ width: "100%", marginTop: 16 }}>
-                      {(currentStep === 2 || videoUploadedUrl || videoFile) && !result && (
-                        <Button
-                          type="primary"
-                          size="large"
-                          block
-                          icon={<SafetyOutlined />}
-                          onClick={handleDetect}
-                          loading={loading}
-                          disabled={(!videoUploadedUrl && !videoFile) || loading}
-                        >
-                          {loading ? "检测中…" : "开始检测"}
-                        </Button>
-                      )}
-                      {currentStep === 3 && result && (
-                        <Button
-                          type="primary"
-                          size="large"
-                          block
-                          icon={<SafetyOutlined />}
-                          onClick={handleDetect}
-                          loading={loading}
-                          disabled={loading}
-                        >
-                          重新检测
-                        </Button>
-                      )}
-                      <Button block icon={<UploadOutlined />} onClick={resetDetection} disabled={loading}>
-                        重新上传
-                      </Button>
-                    </Space>
-                  </Card>
+              <Row gutter={GRID_GUTTER}>
+                <Col xs={COL_FULL_SPAN} lg={COL_HALF_LG_SPAN}>
+                  <VideoInputCard
+                    title="上传待检测视频"
+                    inputTab={videoInputTab}
+                    loading={loading}
+                    videoFile={videoFile}
+                    videoUrlInput={videoUrlInput}
+                    videoPreviewUrl={videoPreviewUrl}
+                    videoUploadFileName={videoUploadFileName}
+                    detectButtonDisabled={!videoPreviewUrl && !videoFile && !videoUrlInput.trim()}
+                    onInputTabChange={setVideoInputTab}
+                    onVideoFileChange={handleVideoFileChange}
+                    onVideoUrlInputChange={setVideoUrlInput}
+                    onVideoUrlLoad={handleVideoUrlLoad}
+                    onDetect={handleDetect}
+                    onReset={resetDetection}
+                  />
                 </Col>
-                <Col xs={24} lg={12}>
-                  <Card title="检测结果" bordered={false}>
-                    {!result && !loading && (
-                      <div
-                        style={{
-                          textAlign: "center",
-                          padding: "80px 20px",
-                          background: "#fafafa",
-                          borderRadius: 8,
-                        }}
-                      >
-                        <SafetyOutlined style={{ fontSize: 64, color: "#d9d9d9", marginBottom: 16 }} />
-                        <Paragraph style={{ color: "#999", marginBottom: 8 }}>等待上传视频</Paragraph>
-                        <Text type="secondary" style={{ fontSize: 12 }}>
-                          上传或输入视频 URL 后将显示安全检测结果
-                        </Text>
-                      </div>
-                    )}
-                    {loading && (
-                      <div
-                        style={{
-                          textAlign: "center",
-                          padding: "80px 20px",
-                          background: "#fafafa",
-                          borderRadius: 8,
-                        }}
-                      >
-                        <Spin size="large" />
-                        <Paragraph style={{ marginTop: 16, color: "#666" }}>检测中...</Paragraph>
-                      </div>
-                    )}
-                    {result && !loading && (
-                      <div>
-                        <Alert
-                          message="安全检测已完成"
-                          description={`检测到 ${result.violations.length} 个违规类型，风险等级：${riskConfig[result.risk].text}`}
-                          type={result.risk === "low" ? "success" : result.risk === "medium" ? "warning" : "error"}
-                          showIcon
-                          style={{ marginBottom: 16 }}
-                        />
-                        <Space direction="vertical" size="large" style={{ width: "100%" }}>
-                          <div
-                            style={{
-                              textAlign: "center",
-                              padding: "20px",
-                              background: `${riskConfig[result.risk].color}15`,
-                              borderRadius: 8,
-                            }}
-                          >
-                            <div style={{ fontSize: 64, color: riskConfig[result.risk].color }}>
-                              {riskConfig[result.risk].icon}
-                            </div>
-                            <Title
-                              level={3}
-                              style={{ color: riskConfig[result.risk].color, marginTop: 16, marginBottom: 8 }}
-                            >
-                              {riskConfig[result.risk].text}
-                            </Title>
-                            <Text style={{ fontSize: 16 }}>风险评分：{result.riskScore}/100</Text>
-                          </div>
-                          {result.violations.length > 0 && (
-                            <>
-                              <Divider />
-                              <div>
-                                <Text strong style={{ fontSize: 16 }}>
-                                  检测到的违规类型
-                                </Text>
-                                <div style={{ marginTop: 12 }}>
-                                  {result.violations.map((violation) => (
-                                    <Tag
-                                      key={violation}
-                                      color="red"
-                                      style={{ fontSize: 14, padding: "4px 12px", marginBottom: 8 }}
-                                    >
-                                      {violationLabels[violation] || violation}
-                                    </Tag>
-                                  ))}
-                                </div>
-                              </div>
-                              <div>
-                                <Text strong style={{ fontSize: 16 }}>
-                                  详细分析
-                                </Text>
-                                <List
-                                  style={{ marginTop: 12 }}
-                                  size="small"
-                                  bordered
-                                  dataSource={Object.entries(result.details)}
-                                  renderItem={([key, value]) => (
-                                    <List.Item>
-                                      <Space direction="vertical" style={{ width: "100%" }}>
-                                        <div style={{ display: "flex", justifyContent: "space-between" }}>
-                                          <Text strong>{violationLabels[key] || key}</Text>
-                                          <Text type="danger">{Math.round(value.score * 100)}%</Text>
-                                        </div>
-                                      </Space>
-                                    </List.Item>
-                                  )}
-                                />
-                              </div>
-                            </>
-                          )}
-                          {result.suggestions.length > 0 && (
-                            <>
-                              <Divider />
-                              <div>
-                                <Text strong style={{ fontSize: 16 }}>
-                                  整改建议
-                                </Text>
-                                <List
-                                  style={{ marginTop: 12 }}
-                                  size="small"
-                                  dataSource={result.suggestions}
-                                  renderItem={(item, index) => (
-                                    <List.Item>
-                                      <Space>
-                                        <Tag color="orange">{index + 1}</Tag>
-                                        <Text>{item}</Text>
-                                      </Space>
-                                    </List.Item>
-                                  )}
-                                />
-                              </div>
-                            </>
-                          )}
-                          <Space style={{ width: "100%" }} direction="vertical">
-                            <Button type="primary" block icon={<DownloadOutlined />} onClick={handleDownloadReport}>
-                              下载检测报告
-                            </Button>
-                          </Space>
-                        </Space>
-                      </div>
-                    )}
-                  </Card>
+                <Col xs={COL_FULL_SPAN} lg={COL_HALF_LG_SPAN}>
+                  <UnsafeDetectResultCard
+                    loading={loading}
+                    result={result}
+                    emptyTitle="等待上传视频"
+                    emptyDescription="上传或输入视频 URL 后将显示安全检测结果"
+                    onDownloadReport={handleDownloadReport}
+                  />
                 </Col>
               </Row>
             ),

@@ -1,272 +1,94 @@
 import { useState } from "react";
-import {
-  Card,
-  Upload,
-  message,
-  Spin,
-  Typography,
-  Progress,
-  Tag,
-  Space,
-  Row,
-  Col,
-  Image,
-  Alert,
-  Button,
-  Input,
-  Tabs,
-  Select,
-} from "antd";
-import {
-  UploadOutlined,
-  CheckCircleOutlined,
-  CloseCircleOutlined,
-  ScanOutlined,
-  LinkOutlined,
-  EyeOutlined,
-} from "@ant-design/icons";
+import { Col, message, Row, Select, Tabs, Typography } from "antd";
 import type { UploadFile, UploadProps } from "antd";
-// import { apiBase } from "@/utils/apiBase";
-const apiBase = "http://10.102.32.144:3001";
 
-const { Title, Paragraph, Text } = Typography;
-const { Dragger } = Upload;
+import { ImageDetectInputCard } from "@/components/Detect/common/ImageDetectInputCard";
+import { VideoInputCard } from "@/components/Detect/common/VideoInputCard";
+import { FakeDetectResultCard } from "@/components/Detect/Fake/FakeDetectResultCard";
+import {
+  DEFAULT_IMAGE_DETECT_BACKEND,
+  DETECT_STEP_INPUT,
+  DETECT_STEP_READY,
+  DETECT_STEP_RESULT,
+  IMAGE_DETECT_BACKENDS,
+  MAX_LOCAL_VIDEO_BASE64_BYTES,
+  MAX_LOCAL_VIDEO_BASE64_MB,
+} from "@/constants/detect";
+import {
+  COL_FULL_SPAN,
+  COL_HALF_LG_SPAN,
+  FULL_WIDTH,
+  GRID_GUTTER,
+  SCROLL_AFTER_RESULT_DELAY_MS,
+  SMALL_SPACE_SIZE,
+  TITLE_LEVEL_TWO,
+} from "@/constants/ui";
+import { detectFakeImage, detectFakeVideo } from "@/services/detect";
+import type { IDetectMediaBody, IFakeDetectionResult, TDetectContentKind, TDetectInputTab, TImageDetectBackend } from "@/typings/detect";
+import { assertValidUrl, createImageDetectBody, createRemoteUploadFile } from "@/utils/detect";
+import { getBase64FromUploadFile } from "@/utils/media";
 
-/** 图片检测后端：火山 = 原 volc-image-aigc；Universal = 实验室 UniversalFakeDetect */
-const IMAGE_DETECT_BACKENDS = [
-  {
-    value: "volc",
-    label: "Seed-2.0-pro",
-  },
-  {
-    value: "universal",
-    label: "Universal-Fake-Detect",
-  },
-] as const;
-
-type ImageDetectBackend = (typeof IMAGE_DETECT_BACKENDS)[number]["value"];
-
-function formatApiErrorPayload(data: { error?: string; detail?: unknown }): string {
-  const d = data.detail;
-  if (typeof d === "string") return d;
-  if (Array.isArray(d)) {
-    return d.map((x: { msg?: string }) => x?.msg || String(x)).join("；") || "请求无效";
-  }
-  return data.error || "检测失败";
-}
-
-interface DetectionResult {
-  isFake: boolean;
-  confidence: number;
-  /** 模型输出的原始得分（0~1），用于与进度条旁百分比对照展示 */
-  rawScore?: number;
-  heatmapUrl: string;
-  model: string;
-  details: {
-    faceRegion?: {
-      x: number;
-      y: number;
-      width: number;
-      height: number;
-    };
-    artifacts?: string[];
-    /** 视频检测：合成段数占比 0-1，仅视频时有值 */
-    segmentRatio?: number;
-    /** 视频检测：结论文案，仅视频时有值 */
-    segmentConclusion?: string;
-  };
-}
-
-/** 检测类型：图片 / 视频 */
-type DetectType = "image" | "video";
+const { Title, Paragraph } = Typography;
 
 const FakeDetectPage = () => {
-  const [detectType, setDetectType] = useState<DetectType>("image");
+  const [detectType, setDetectType] = useState<TDetectContentKind>("image");
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<DetectionResult | null>(null);
+  const [result, setResult] = useState<IFakeDetectionResult | null>(null);
   const [uploadedFile, setUploadedFile] = useState<UploadFile | null>(null);
-  const [previewUrl, setPreviewUrl] = useState<string>("");
-  const [urlInput, setUrlInput] = useState<string>("");
-  const [videoUrl, setVideoUrl] = useState<string>("");
+  const [previewUrl, setPreviewUrl] = useState("");
+  const [urlInput, setUrlInput] = useState("");
+  const [videoUrl, setVideoUrl] = useState("");
   const [videoFile, setVideoFile] = useState<File | null>(null);
-  const [videoUploadFileName, setVideoUploadFileName] = useState<string>("");
-  const [videoPreviewUrl, setVideoPreviewUrl] = useState<string>("");
-  const [activeTab, setActiveTab] = useState<string>("upload");
-  const [videoInputTab, setVideoInputTab] = useState<"url" | "upload">("upload");
-  const [imageDetectBackend, setImageDetectBackend] = useState<ImageDetectBackend>("volc");
-  const [currentStep, setCurrentStep] = useState<number>(1);
+  const [videoUploadFileName, setVideoUploadFileName] = useState("");
+  const [videoPreviewUrl, setVideoPreviewUrl] = useState("");
+  const [activeTab, setActiveTab] = useState<TDetectInputTab>("upload");
+  const [videoInputTab, setVideoInputTab] = useState<TDetectInputTab>("upload");
+  const [imageDetectBackend, setImageDetectBackend] = useState<TImageDetectBackend>(DEFAULT_IMAGE_DETECT_BACKEND);
+  const [currentStep, setCurrentStep] = useState(DETECT_STEP_INPUT);
 
-  const handleUpload: UploadProps["customRequest"] = async (options) => {
-    const { file } = options;
+  const scrollToResult = () => {
+    setTimeout(() => window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" }), SCROLL_AFTER_RESULT_DELAY_MS);
+  };
+
+  const handleImageUpload: UploadProps["customRequest"] = async ({ file }) => {
     const uploadFile = file as File;
-    const isImage = (uploadFile.type || "").startsWith("image/");
-    if (!isImage) {
+
+    if (!uploadFile.type.startsWith("image/")) {
       message.warning("当前为「图片 AI 合成检测」，仅支持图片。请选择 JPG、PNG 等图片文件。");
       return;
     }
-    try {
-      setUploadedFile(file as any);
-      const url = URL.createObjectURL(uploadFile);
-      setPreviewUrl(url);
-      setCurrentStep(2);
-      message.success("文件上传成功，请选择检测方法");
-    } catch (error) {
-      console.error("Upload error:", error);
-      message.error("上传失败，请重试");
-    }
+
+    setUploadedFile({
+      uid: uploadFile.name,
+      name: uploadFile.name,
+      status: "done",
+      originFileObj: uploadFile as UploadFile["originFileObj"],
+    });
+    setPreviewUrl(URL.createObjectURL(uploadFile));
+    setCurrentStep(DETECT_STEP_READY);
+    message.success("文件上传成功，请选择检测方法");
   };
 
-  const handleUrlLoad = async () => {
-    if (!urlInput.trim()) {
+  const handleUrlLoad = () => {
+    const nextUrl = urlInput.trim();
+
+    if (!nextUrl) {
       message.warning("请输入URL地址");
       return;
     }
 
-    // 验证URL格式
     try {
-      new URL(urlInput);
-    } catch {
-      message.error("URL格式不正确，请输入有效的URL");
-      return;
-    }
-
-    try {
-      setLoading(true);
-      // 这里可以实际调用API来获取远程文件
-      // 暂时使用URL作为预览
-      setPreviewUrl(urlInput);
-      setUploadedFile({
-        uid: "-1",
-        name: urlInput.split("/").pop() || "remote-file",
-        status: "done",
-        url: urlInput,
-      } as UploadFile);
-      setCurrentStep(2); // URL加载成功后进入选择检测方法步骤
+      assertValidUrl(nextUrl, "URL格式不正确，请输入有效的URL");
+      setPreviewUrl(nextUrl);
+      setUploadedFile(createRemoteUploadFile(nextUrl));
+      setCurrentStep(DETECT_STEP_READY);
       message.success("URL加载成功，请选择检测方法");
     } catch (error) {
-      console.error("URL load error:", error);
-      message.error("URL加载失败，请检查地址是否正确");
-    } finally {
-      setLoading(false);
+      message.error(error instanceof Error ? error.message : "URL加载失败，请检查地址是否正确");
     }
   };
 
-  const fileToBase64 = (file: File): Promise<string> =>
-    new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => {
-        const dataUrl = reader.result as string;
-        const base64 = dataUrl.replace(/^data:[^;]+;base64,/, "");
-        resolve(base64);
-      };
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
-    });
-
-  /** 视频 AI 生成检测：火山方舟视频理解，支持 URL 或本地上传（base64） */
-  const handleVideoDetect = async () => {
-    const urlInput = videoUrl.trim();
-    const url = videoPreviewUrl || urlInput;
-
-    if (!url && !videoFile) {
-      message.warning("请输入视频 URL 或选择本地视频");
-      return;
-    }
-    if (url) {
-      try {
-        new URL(url);
-      } catch {
-        message.error("视频地址无效");
-        return;
-      }
-      if (urlInput && url === urlInput) setVideoPreviewUrl(urlInput);
-    }
-
-    try {
-      setLoading(true);
-      setResult(null);
-
-      let body: { videoUrl?: string; videoBase64?: string } = {};
-      if (url && !videoFile) {
-        body.videoUrl = url;
-      } else if (videoFile) {
-        const MAX_BASE64_MB = 20;
-        if (videoFile.size > MAX_BASE64_MB * 1024 * 1024) {
-          message.warning(`本地上传建议不超过 ${MAX_BASE64_MB}MB，请使用视频 URL`);
-          setLoading(false);
-          return;
-        }
-        const base64 = await new Promise<string>((resolve, reject) => {
-          const r = new FileReader();
-          r.onload = () => {
-            const s = (r.result as string) || "";
-            resolve(s.indexOf(",") >= 0 ? s.split(",")[1] : s);
-          };
-          r.onerror = reject;
-          r.readAsDataURL(videoFile);
-        });
-        body.videoBase64 = base64;
-      } else {
-        message.warning("请输入视频 URL 或选择本地视频");
-        setLoading(false);
-        return;
-      }
-
-      const res = await fetch(`${apiBase}/api/detect/volc-video-aigc`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      const text = await res.text();
-      if (text.trimStart().startsWith("<")) {
-        message.error("代理未返回 JSON（可能未启动）：请先执行 node server/index.cjs");
-        setLoading(false);
-        return;
-      }
-      let data: DetectionResult & { error?: string };
-      try {
-        data = text ? JSON.parse(text) : ({} as DetectionResult);
-      } catch {
-        message.error("检测接口返回格式错误");
-        setLoading(false);
-        return;
-      }
-      if (data.error || !res.ok) {
-        message.error((data as { error?: string }).error || "视频检测失败");
-        setLoading(false);
-        return;
-      }
-      const vConf =
-        typeof data.confidence === "number" && !Number.isNaN(data.confidence)
-          ? Math.min(1, Math.max(0, data.confidence))
-          : data.isFake
-            ? 0.8
-            : 0.2;
-      setResult({
-        isFake: data.isFake,
-        confidence: vConf,
-        rawScore: vConf,
-        model: data.model || "视频 AI 生成识别",
-        heatmapUrl: data.heatmapUrl ?? url,
-        details: data.details ?? {},
-      });
-      setCurrentStep(3);
-      message.success("视频检测完成");
-      setTimeout(() => window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" }), 100);
-    } catch (err: unknown) {
-      console.error("Video detect error:", err);
-      const msg = err instanceof Error ? err.message : "视频检测失败";
-      const friendly =
-        msg.includes("Unexpected token") || msg.includes("is not valid JSON")
-          ? "代理未返回 JSON，请先启动 node server/index.cjs"
-          : msg;
-      message.error(friendly);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleDetect = async () => {
+  const handleImageDetect = async () => {
     if (!uploadedFile) {
       message.warning("请先上传文件");
       return;
@@ -275,106 +97,77 @@ const FakeDetectPage = () => {
     try {
       setLoading(true);
       setResult(null);
-
-      const body: { imageUrl?: string; imageBase64?: string } = {};
-      const rawFile = (uploadedFile as UploadFile).originFileObj ?? (uploadedFile as unknown as File);
-      if (activeTab === "upload" && rawFile instanceof File) {
-        if (!rawFile.type.startsWith("image/")) {
-          message.warning("当前仅支持图片检测，请上传图片（JPG、PNG 等）");
-          setLoading(false);
-          return;
-        }
-        body.imageBase64 = await fileToBase64(rawFile);
-      } else if (activeTab === "url" && urlInput.trim()) {
-        body.imageUrl = urlInput.trim();
-      } else {
-        message.warning("无法获取图片内容，请重新上传或输入 URL");
-        setLoading(false);
-        return;
-      }
-
-      let detectionResult: DetectionResult;
-
-      if (imageDetectBackend === "volc") {
-        const res = await fetch(`${apiBase}/api/detect/volc-image-aigc`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-        });
-        const data = await res.json();
-        if (!res.ok) {
-          throw new Error(formatApiErrorPayload(data));
-        }
-        const isAIGenerated = data.isAIGenerated === true;
-        const confidence =
-          typeof data.confidence === "number" ? Math.min(1, Math.max(0, data.confidence)) : isAIGenerated ? 0.8 : 0.2;
-        const reason = (data.reason || "").trim();
-        const artifacts: string[] = reason ? [reason] : isAIGenerated ? ["判定为 AI 生成/合成"] : [];
-        detectionResult = {
-          isFake: isAIGenerated,
-          confidence,
-          rawScore: confidence,
-          model: "火山引擎",
-          details: { artifacts },
-          heatmapUrl: previewUrl,
-        };
-      } else {
-        const res = await fetch(`${apiBase}/api/detect/universal-fake-detect`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-        });
-        const data = await res.json();
-        if (!res.ok) {
-          throw new Error(formatApiErrorPayload(data));
-        }
-        const isFake = data.is_ai_generated === true;
-        const score =
-          typeof data.score === "number" && !Number.isNaN(data.score)
-            ? Math.min(1, Math.max(0, data.score))
-            : isFake
-              ? 0.8
-              : 0.2;
-        const msg = typeof data.message === "string" ? data.message.trim() : "";
-        const artifacts: string[] = [];
-        if (msg) artifacts.push(msg);
-        if (typeof data.arch === "string" && data.arch) artifacts.push(`模型架构: ${data.arch}`);
-        if (typeof data.threshold === "number") artifacts.push(`判定阈值: ${data.threshold}`);
-        detectionResult = {
-          isFake,
-          confidence: score,
-          rawScore: score,
-          model: "UniversalFakeDetect",
-          details: { artifacts },
-          heatmapUrl: previewUrl,
-        };
-      }
-
-      setResult(detectionResult);
-      setCurrentStep(3);
+      const body = await createImageDetectBody(activeTab, uploadedFile, urlInput);
+      setResult(await detectFakeImage({ body, backend: imageDetectBackend, previewUrl }));
+      setCurrentStep(DETECT_STEP_RESULT);
       message.success("AI 图片生成检测完成");
-
-      setTimeout(() => {
-        window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
-      }, 100);
-    } catch (err: unknown) {
-      console.error("Detection error:", err);
-      let msg = err instanceof Error ? err.message : "检测失败，请重试";
-      if (msg === "Failed to fetch" || msg.includes("NetworkError") || msg.includes("Load failed")) {
-        msg = "请求失败：请先启动代理（另开终端执行 npm run dev:proxy 或 node server/index.cjs）";
-      }
-      message.error(msg);
+      scrollToResult();
+    } catch (error) {
+      const rawMessage = error instanceof Error ? error.message : "检测失败，请重试";
+      const friendlyMessage =
+        rawMessage === "Failed to fetch" || rawMessage.includes("NetworkError") || rawMessage.includes("Load failed")
+          ? "请求失败：请先启动代理（另开终端执行 npm run dev:proxy 或 node server/index.cjs）"
+          : rawMessage;
+      message.error(friendlyMessage);
     } finally {
       setLoading(false);
     }
   };
 
-  const uploadProps: UploadProps = {
-    name: "file",
-    multiple: false,
-    customRequest: handleUpload,
-    showUploadList: false,
-    accept: "image/*",
+  const handleVideoFileChange = (file: File) => {
+    setVideoFile(file);
+    setVideoPreviewUrl(URL.createObjectURL(file));
+    setVideoUploadFileName(file.name || "视频文件");
+    setVideoUrl("");
+    setCurrentStep(DETECT_STEP_READY);
+    message.success("已选择视频，可点击开始检测");
+  };
+
+  const handleVideoDetect = async () => {
+    const inputUrl = videoUrl.trim();
+    const preview = videoPreviewUrl || inputUrl;
+
+    if (!preview && !videoFile) {
+      message.warning("请输入视频 URL 或选择本地视频");
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setResult(null);
+      const body: IDetectMediaBody = {};
+
+      if (videoFile) {
+        if (videoFile.size > MAX_LOCAL_VIDEO_BASE64_BYTES) {
+          message.warning(`本地上传建议不超过 ${MAX_LOCAL_VIDEO_BASE64_MB}MB，请使用视频 URL`);
+          return;
+        }
+        body.videoBase64 = await getBase64FromUploadFile({
+          uid: videoFile.name,
+          name: videoFile.name,
+          status: "done",
+          originFileObj: videoFile as UploadFile["originFileObj"],
+        });
+      } else {
+        assertValidUrl(inputUrl, "视频地址无效");
+        body.videoUrl = inputUrl;
+        setVideoPreviewUrl(inputUrl);
+      }
+
+      setResult(await detectFakeVideo({ body, previewUrl: preview }));
+      setCurrentStep(DETECT_STEP_RESULT);
+      message.success("视频检测完成");
+      scrollToResult();
+    } catch (error) {
+      const messageText = error instanceof Error ? error.message : "视频检测失败";
+      const friendlyMessage =
+        messageText.includes("Unexpected token") || messageText.includes("is not valid JSON")
+          ? "代理未返回 JSON，请先启动 node server/index.cjs"
+          : messageText;
+      message.error(friendlyMessage);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const resetDetection = () => {
@@ -386,28 +179,22 @@ const FakeDetectPage = () => {
     setVideoPreviewUrl("");
     setVideoFile(null);
     setVideoUploadFileName("");
-    setCurrentStep(1);
-    setImageDetectBackend("volc");
+    setCurrentStep(DETECT_STEP_INPUT);
+    setImageDetectBackend(DEFAULT_IMAGE_DETECT_BACKEND);
   };
 
-  /** 视频选择（本地上传）：仅选择文件，检测时以 base64 发送 */
-  const handleVideoSelect = (file: File) => {
-    const isVideo = (file.type || "").startsWith("video/");
-    if (!isVideo) {
-      message.warning("仅支持视频文件（MP4、AVI 等）");
-      return false;
-    }
-    setVideoFile(file);
-    setVideoPreviewUrl(URL.createObjectURL(file));
-    setVideoUploadFileName(file.name || "视频文件");
-    message.success("已选择视频，可点击开始检测");
-    return false;
+  const uploadProps: UploadProps = {
+    name: "file",
+      multiple: false,
+    customRequest: handleImageUpload,
+    showUploadList: false,
+    accept: "image/*",
   };
 
   return (
     <div className="page-transition">
       <div className="page-header">
-        <Title level={2} className="page-title">
+        <Title level={TITLE_LEVEL_TWO} className="page-title">
           合成媒体与深度伪造检测
         </Title>
         <Paragraph className="page-description">
@@ -417,582 +204,98 @@ const FakeDetectPage = () => {
         </Paragraph>
       </div>
 
-      <Row gutter={24}>
-        <Col xs={24} lg={12}>
+      <Row gutter={GRID_GUTTER}>
+        <Col xs={COL_FULL_SPAN} lg={COL_HALF_LG_SPAN}>
           <Tabs
             activeKey={detectType}
-            onChange={(k) => {
-              setDetectType(k as DetectType);
+            onChange={(key) => {
+              setDetectType(key as TDetectContentKind);
               setResult(null);
-              setCurrentStep(1);
+              setCurrentStep(DETECT_STEP_INPUT);
             }}
             items={[
               {
                 key: "image",
                 label: "图片 AI 合成检测",
                 children: (
-                  <Card title="上传待检测图片" bordered={false}>
-                    <Tabs
-                      activeKey={activeTab}
-                      onChange={setActiveTab}
-                      items={[
-                        {
-                          key: "upload",
-                          label: (
-                            <span>
-                              <UploadOutlined /> 本地上传
-                            </span>
-                          ),
-                          children: (
-                            <>
-                              {!uploadedFile && (
-                                <Dragger {...uploadProps} style={{ padding: "40px 20px" }}>
-                                  <p className="ant-upload-drag-icon">
-                                    <UploadOutlined style={{ fontSize: 48, color: "#1890ff" }} />
-                                  </p>
-                                  <p className="ant-upload-text" style={{ fontSize: 18 }}>
-                                    点击或拖拽图片到此区域上传
-                                  </p>
-                                  <p className="ant-upload-hint">仅支持图片格式（JPG、PNG）</p>
-                                </Dragger>
-                              )}
-
-                              {uploadedFile &&
-                                previewUrl &&
-                                activeTab === "upload" &&
-                                !(currentStep === 2 && !result) && (
-                                  <div
-                                    className="heatmap-overlay"
-                                    style={{
-                                      maxHeight: 320,
-                                      borderRadius: 8,
-                                      overflow: "hidden",
-                                      background: "#fafafa",
-                                      display: "flex",
-                                      alignItems: "center",
-                                      justifyContent: "center",
-                                    }}
-                                  >
-                                    <Image
-                                      src={previewUrl}
-                                      alt="上传的内容"
-                                      style={{
-                                        width: "100%",
-                                        maxHeight: 320,
-                                        objectFit: "contain",
-                                        borderRadius: 8,
-                                      }}
-                                      preview={false}
-                                    />
-                                    {result && result.details.faceRegion && (
-                                      <div
-                                        className="heatmap-layer"
-                                        style={{
-                                          top: `${(result.details.faceRegion.y / 100) * 100}%`,
-                                          left: `${(result.details.faceRegion.x / 100) * 100}%`,
-                                          width: `${(result.details.faceRegion.width / 100) * 100}%`,
-                                          height: `${(result.details.faceRegion.height / 100) * 100}%`,
-                                        }}
-                                      />
-                                    )}
-                                  </div>
-                                )}
-                            </>
-                          ),
-                        },
-                        {
-                          key: "url",
-                          label: (
-                            <span>
-                              <LinkOutlined /> URL解析
-                            </span>
-                          ),
-                          children: (
-                            <>
-                              <Space.Compact style={{ width: "100%", marginBottom: 16 }}>
-                                <Input
-                                  size="large"
-                                  placeholder="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=768"
-                                  value={urlInput}
-                                  onChange={(e) => setUrlInput(e.target.value)}
-                                  onPressEnter={handleUrlLoad}
-                                  disabled={loading}
-                                />
-                                <Button
-                                  type="primary"
-                                  size="large"
-                                  onClick={handleUrlLoad}
-                                  loading={loading}
-                                  icon={<LinkOutlined />}
-                                >
-                                  加载
-                                </Button>
-                              </Space.Compact>
-
-                              {uploadedFile && previewUrl && activeTab === "url" && !(currentStep === 2 && !result) && (
-                                <div
-                                  className="heatmap-overlay"
-                                  style={{
-                                    maxHeight: 320,
-                                    borderRadius: 8,
-                                    overflow: "hidden",
-                                    background: "#fafafa",
-                                    display: "flex",
-                                    alignItems: "center",
-                                    justifyContent: "center",
-                                  }}
-                                >
-                                  <Image
-                                    src={previewUrl}
-                                    alt="URL内容"
-                                    style={{
-                                      width: "100%",
-                                      maxHeight: 320,
-                                      objectFit: "contain",
-                                      borderRadius: 8,
-                                    }}
-                                    preview={false}
-                                  />
-                                  {result && result.details.faceRegion && (
-                                    <div
-                                      className="heatmap-layer"
-                                      style={{
-                                        top: `${(result.details.faceRegion.y / 100) * 100}%`,
-                                        left: `${(result.details.faceRegion.x / 100) * 100}%`,
-                                        width: `${(result.details.faceRegion.width / 100) * 100}%`,
-                                        height: `${(result.details.faceRegion.height / 100) * 100}%`,
-                                      }}
-                                    />
-                                  )}
-                                </div>
-                              )}
-                            </>
-                          ),
-                        },
-                      ]}
-                    />
-
-                    {/* 步骤2：上传预览、模型选择、操作按钮纵向排列 */}
-                    {currentStep === 2 && uploadedFile && previewUrl && !result && (
-                      <Space direction="vertical" size={16} style={{ width: "100%", marginTop: 20 }}>
-                        <div
-                          style={{
-                            minHeight: 260,
-                            maxHeight: 360,
-                            borderRadius: 12,
-                            overflow: "hidden",
-                            background: "linear-gradient(145deg, #f8f9fa 0%, #f1f3f5 100%)",
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            padding: 12,
-                            border: "1px solid #e9ecef",
-                          }}
-                        >
-                          <div className="image-preview-wrap" style={{ maxWidth: "100%", maxHeight: 336 }}>
-                            <Image
-                              src={previewUrl}
-                              alt="待检测图片"
-                              style={{
-                                maxWidth: "100%",
-                                maxHeight: 336,
-                                objectFit: "contain",
-                                borderRadius: 8,
-                              }}
-                              preview={{ mask: null }}
-                            />
-                            <div className="image-preview-mask">
-                              <EyeOutlined style={{ fontSize: 24 }} />
-                              <span>预览</span>
-                            </div>
-                          </div>
-                        </div>
-                        <Card
-                          title="选择检测模型"
-                          size="small"
-                          bordered={false}
-                          style={{
-                            borderRadius: 12,
-                            background: "#fafbfc",
-                            border: "1px solid #e9ecef",
-                            boxShadow: "0 1px 2px rgba(0,0,0,0.04)",
-                          }}
-                          bodyStyle={{ padding: "16px 20px" }}
-                        >
-                          <Select
-                            size="large"
-                            value={imageDetectBackend}
-                            onChange={(value) => setImageDetectBackend(value as ImageDetectBackend)}
-                            optionLabelProp="label"
-                            style={{ width: "100%" }}
-                          >
-                            {IMAGE_DETECT_BACKENDS.map((model) => (
-                              <Select.Option key={model.value} value={model.value} label={model.label}>
-                                {model.label}
-                              </Select.Option>
-                            ))}
-                          </Select>
-                        </Card>
-                        <Space direction="vertical" style={{ width: "100%" }} size={12}>
-                          <Button
-                            type="primary"
-                            size="large"
-                            block
-                            icon={<ScanOutlined />}
-                            onClick={handleDetect}
-                            loading={loading}
-                            disabled={loading}
-                            style={{ height: 44, borderRadius: 8 }}
-                          >
-                            {loading
-                              ? "检测中..."
-                              : `开始检测（${
-                                  IMAGE_DETECT_BACKENDS.find((b) => b.value === imageDetectBackend)?.label ?? ""
-                                }）`}
-                          </Button>
-                          <Button
-                            block
-                            icon={<UploadOutlined />}
-                            onClick={resetDetection}
-                            disabled={loading}
-                            style={{ borderRadius: 8 }}
-                          >
-                            重新上传
-                          </Button>
-                        </Space>
-                      </Space>
-                    )}
-
-                    {/* 步骤3 或有结果时：全宽图片 + 按钮 */}
-                    {!(currentStep === 2 && uploadedFile && !result) && (
-                      <Space direction="vertical" style={{ width: "100%", marginTop: 16 }} size={12}>
-                        {currentStep === 3 && result && (
-                          <Button
-                            type="primary"
-                            size="large"
-                            block
-                            icon={<ScanOutlined />}
-                            onClick={handleDetect}
-                            loading={loading}
-                            disabled={loading}
-                            style={{ borderRadius: 8 }}
-                          >
-                            重新检测
-                          </Button>
-                        )}
-                        {uploadedFile && (
-                          <Button
-                            block
-                            icon={<UploadOutlined />}
-                            onClick={resetDetection}
-                            disabled={loading}
-                            style={{ borderRadius: 8 }}
-                          >
-                            重新上传
-                          </Button>
-                        )}
-                      </Space>
-                    )}
-                  </Card>
+                  <ImageDetectInputCard
+                    title="上传待检测图片"
+                    activeTab={activeTab}
+                    loading={loading}
+                    uploadedFile={uploadedFile}
+                    previewUrl={previewUrl}
+                    currentStep={currentStep}
+                    hasResult={Boolean(result)}
+                    urlInput={urlInput}
+                    uploadHint="仅支持图片格式（JPG、PNG）"
+                    uploadProps={uploadProps}
+                    faceRegion={result?.details.faceRegion}
+                    onActiveTabChange={setActiveTab}
+                    onUrlInputChange={setUrlInput}
+                    onUrlLoad={handleUrlLoad}
+                    onDetect={handleImageDetect}
+                    onReset={resetDetection}
+                    detectButtonText={`开始检测（${IMAGE_DETECT_BACKENDS.find((backend) => backend.value === imageDetectBackend)?.label || ""}）`}
+                    modelSelector={
+                      <Select
+                        size="large"
+                        value={imageDetectBackend}
+                        onChange={(value) => setImageDetectBackend(value)}
+                        optionLabelProp="label"
+                        style={{ width: FULL_WIDTH }}
+                      >
+                        {IMAGE_DETECT_BACKENDS.map((backend) => (
+                          <Select.Option key={backend.value} value={backend.value} label={backend.label}>
+                            {backend.label}
+                          </Select.Option>
+                        ))}
+                      </Select>
+                    }
+                  />
                 ),
               },
               {
                 key: "video",
                 label: "视频 AI 合成检测",
                 children: (
-                  <Card title="上传待检测视频" bordered={false}>
-                    <Paragraph type="secondary" style={{ marginBottom: 12 }}>
-                      对视频进行合成/深度伪造检测，使用<strong>火山引擎</strong>多模态视频理解。支持公网 URL
-                      或本地上传（建议 ≤20MB）。UniversalFakeDetect 当前仅支持单张图片，请在「图片 AI 合成检测」中使用。
-                    </Paragraph>
-                    <Tabs
-                      activeKey={videoInputTab}
-                      onChange={(k) => {
-                        setVideoInputTab(k as "url" | "upload");
-                        if (k === "url") {
-                          setVideoUploadFileName("");
-                          setVideoFile(null);
-                        } else {
-                          setVideoPreviewUrl("");
-                        }
-                      }}
-                      items={[
-                        {
-                          key: "upload",
-                          label: (
-                            <span>
-                              <UploadOutlined /> 本地上传
-                            </span>
-                          ),
-                          children: (
-                            <>
-                              {!videoFile && (
-                                <Dragger
-                                  name="video"
-                                  multiple={false}
-                                  accept="video/*"
-                                  showUploadList={false}
-                                  customRequest={({ file }) => handleVideoSelect(file as File)}
-                                  disabled={loading}
-                                  style={{ padding: "24px 16px", position: "relative" }}
-                                >
-                                  <p className="ant-upload-drag-icon">
-                                    <UploadOutlined style={{ fontSize: 48, color: "#1890ff" }} />
-                                  </p>
-                                  <p className="ant-upload-text" style={{ fontSize: 16 }}>
-                                    点击或拖拽视频到此区域选择
-                                  </p>
-                                  <p className="ant-upload-hint">≤20MB 将用 Base64 直接检测，无需上传云端</p>
-                                </Dragger>
-                              )}
-                              {videoFile && videoPreviewUrl && (
-                                <>
-                                  <video
-                                    src={videoPreviewUrl}
-                                    controls
-                                    style={{ width: "100%", borderRadius: 8 }}
-                                    title={videoUploadFileName}
-                                  />
-                                </>
-                              )}
-                              <Paragraph type="secondary" style={{ marginTop: 12, marginBottom: 0, fontSize: 12 }}>
-                                本地上传 ≤20MB 将使用 Base64 直接检测；更大视频请使用视频 URL。
-                              </Paragraph>
-                              <Button
-                                type="primary"
-                                size="large"
-                                block
-                                icon={<ScanOutlined />}
-                                onClick={handleVideoDetect}
-                                loading={loading}
-                                disabled={loading || !videoFile}
-                                style={{ marginTop: 16 }}
-                              >
-                                {loading ? "检测中…" : "开始检测"}
-                              </Button>
-                            </>
-                          ),
-                        },
-                        {
-                          key: "url",
-                          label: (
-                            <span>
-                              <LinkOutlined /> 视频 URL
-                            </span>
-                          ),
-                          children: (
-                            <>
-                              <Space.Compact style={{ width: "100%", marginBottom: 12 }}>
-                                <Input
-                                  size="large"
-                                  placeholder="https://example.com/video.mp4"
-                                  value={videoUrl}
-                                  onChange={(e) => {
-                                    setVideoUrl(e.target.value);
-                                    setVideoPreviewUrl("");
-                                  }}
-                                  disabled={loading}
-                                  style={{ flex: 1 }}
-                                />
-                                <Button
-                                  type="primary"
-                                  size="large"
-                                  onClick={handleVideoDetect}
-                                  loading={loading}
-                                  icon={<ScanOutlined />}
-                                >
-                                  开始检测
-                                </Button>
-                              </Space.Compact>
-                              {videoPreviewUrl && (
-                                <div
-                                  style={{
-                                    marginBottom: 16,
-                                    borderRadius: 12,
-                                    overflow: "hidden",
-                                    background: "#fafafa",
-                                    border: "1px solid #e9ecef",
-                                    padding: 12,
-                                  }}
-                                >
-                                  <video
-                                    src={videoPreviewUrl}
-                                    controls
-                                    style={{
-                                      width: "100%",
-                                      maxHeight: 320,
-                                      display: "block",
-                                      borderRadius: 8,
-                                    }}
-                                    preload="metadata"
-                                  />
-                                </div>
-                              )}
-                            </>
-                          ),
-                        },
-                      ]}
-                    />
-                    <Button
-                      block
-                      icon={<UploadOutlined />}
-                      onClick={resetDetection}
-                      disabled={loading}
-                      style={{ marginTop: 16 }}
-                    >
-                      重新输入
-                    </Button>
-                  </Card>
+                  <VideoInputCard
+                    title="上传待检测视频"
+                    description={
+                      <Paragraph type="secondary" style={{ marginBottom: SMALL_SPACE_SIZE }}>
+                        对视频进行合成/深度伪造检测，使用<strong>火山引擎</strong>多模态视频理解。支持公网 URL
+                        或本地上传（建议 ≤{MAX_LOCAL_VIDEO_BASE64_MB}MB）。
+                      </Paragraph>
+                    }
+                    inputTab={videoInputTab}
+                    loading={loading}
+                    videoFile={videoFile}
+                    videoUrlInput={videoUrl}
+                    videoPreviewUrl={videoPreviewUrl}
+                    videoUploadFileName={videoUploadFileName}
+                    detectButtonDisabled={!videoFile && !videoUrl.trim()}
+                    onInputTabChange={(tab) => {
+                      setVideoInputTab(tab);
+                      if (tab === "url") {
+                        setVideoFile(null);
+                        setVideoUploadFileName("");
+                      }
+                    }}
+                    onVideoFileChange={handleVideoFileChange}
+                    onVideoUrlInputChange={(value) => {
+                      setVideoUrl(value);
+                      setVideoPreviewUrl("");
+                    }}
+                    onDetect={handleVideoDetect}
+                    onReset={resetDetection}
+                  />
                 ),
               },
             ]}
           />
         </Col>
 
-        <Col xs={24} lg={12}>
-          <Card title="检测结果" bordered={false}>
-            {!result && !loading && (
-              <div
-                style={{
-                  textAlign: "center",
-                  padding: "80px 20px",
-                  background: "#fafafa",
-                  borderRadius: 8,
-                }}
-              >
-                <ScanOutlined style={{ fontSize: 64, color: "#d9d9d9", marginBottom: 16 }} />
-                <Paragraph style={{ color: "#999", marginBottom: 8 }}>
-                  {detectType === "video" ? "输入视频 URL 或选择本地视频后点击开始检测" : "等待上传文件"}
-                </Paragraph>
-                <Text type="secondary" style={{ fontSize: 12 }}>
-                  {detectType === "video" ? "输入视频 URL 或选择本地视频后点击开始检测" : "上传后将显示检测结果"}
-                </Text>
-              </div>
-            )}
-
-            {loading && (
-              <div
-                style={{
-                  textAlign: "center",
-                  padding: "80px 20px",
-                  background: "#fafafa",
-                  borderRadius: 8,
-                }}
-              >
-                <Spin size="large" />
-                <Paragraph style={{ marginTop: 16, color: "#666" }}>
-                  {detectType === "video" ? "检测中…（视频理解分析中）" : "检测中..."}
-                </Paragraph>
-              </div>
-            )}
-
-            {result && !loading && (
-              <div>
-                <Space direction="vertical" size="large" style={{ width: "100%" }}>
-                  <div style={{ textAlign: "center", padding: "16px 0" }}>
-                    {result.isFake ? (
-                      <>
-                        <CloseCircleOutlined style={{ fontSize: 56, color: "#ff4d4f" }} />
-                        <div style={{ marginTop: 12, fontSize: 18, fontWeight: 600, color: "#ff4d4f" }}>
-                          识别结果：不通过
-                        </div>
-                      </>
-                    ) : (
-                      <>
-                        <CheckCircleOutlined style={{ fontSize: 56, color: "#52c41a" }} />
-                        <div style={{ marginTop: 12, fontSize: 18, fontWeight: 600, color: "#52c41a" }}>
-                          识别结果：通过 (Pass)
-                        </div>
-                      </>
-                    )}
-                  </div>
-
-                  {/* AI生成概率 / 合成段数占比 */}
-                  <div>
-                    <div
-                      style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "center",
-                        marginBottom: 8,
-                      }}
-                    >
-                      <Text strong style={{ fontSize: 16 }}>
-                        {result.details.segmentRatio != null ? "合成段数占比" : "AI生成概率"}
-                      </Text>
-                      <Text strong style={{ fontSize: 16, color: result.isFake ? "#ff4d4f" : "#52c41a" }}>
-                        {Math.round(result.confidence * 100)}%
-                      </Text>
-                    </div>
-                    <Progress
-                      percent={Math.round(result.confidence * 100)}
-                      status={result.isFake ? "exception" : "success"}
-                      strokeColor={result.isFake ? "#ff4d4f" : "#52c41a"}
-                    />
-                    <Paragraph
-                      type="secondary"
-                      style={{
-                        marginTop: 10,
-                        marginBottom: 0,
-                        fontSize: 14,
-                        fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
-                      }}
-                    >
-                      模型得分（0～1，越大越倾向 AI 生成/伪造）：
-                      <Text strong style={{ marginLeft: 6, color: result.isFake ? "#ff4d4f" : "#52c41a" }}>
-                        {(result.rawScore ?? result.confidence).toFixed(6)}
-                      </Text>
-                    </Paragraph>
-                    {result.details.segmentConclusion && (
-                      <Paragraph
-                        type="secondary"
-                        style={{
-                          marginTop: 8,
-                          marginBottom: 0,
-                          fontSize: 13,
-                          wordBreak: "break-word",
-                          overflowWrap: "break-word",
-                        }}
-                      >
-                        {result.details.segmentConclusion}
-                      </Paragraph>
-                    )}
-                  </div>
-
-                  {result.details.artifacts && result.details.artifacts.length > 0 && (
-                    <div style={{ wordBreak: "break-word", overflowWrap: "break-word" }}>
-                      <Text strong>检测到的异常特征</Text>
-                      <div style={{ marginTop: 8 }}>
-                        {result.details.artifacts.map((artifact, index) => (
-                          <Tag
-                            color="red"
-                            key={index}
-                            style={{
-                              marginBottom: 8,
-                              maxWidth: "100%",
-                              whiteSpace: "normal",
-                              wordBreak: "break-word",
-                            }}
-                          >
-                            {artifact}
-                          </Tag>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {result.details.faceRegion && (
-                    <Alert
-                      message="可疑区域已标注"
-                      description="红色高亮区域为算法判定的可疑篡改/伪造区域，供人工复核参考。"
-                      type="warning"
-                      showIcon
-                    />
-                  )}
-                </Space>
-              </div>
-            )}
-          </Card>
+        <Col xs={COL_FULL_SPAN} lg={COL_HALF_LG_SPAN}>
+          <FakeDetectResultCard detectType={detectType} loading={loading} result={result} />
         </Col>
       </Row>
     </div>
