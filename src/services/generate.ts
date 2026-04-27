@@ -9,6 +9,9 @@ import type {
   IImageGenerateResult,
   IVideoGenerateResult,
   TDeepfakeModel,
+  TFaceSwapFaceType,
+  TFaceSwapLogoLanguage,
+  TFaceSwapLogoPosition,
   TImageModel,
   TVideoModel,
 } from "@/typings/generate";
@@ -27,6 +30,17 @@ export interface IFaceSwapGenerateParams {
   imageBase64: string;
   templateBase64: string;
   model?: TDeepfakeModel;
+  sourceSimilarity?: number;
+  doRisk?: boolean;
+  faceType?: TFaceSwapFaceType;
+  sourceLocation?: number;
+  templateLocation?: number;
+  returnUrl?: boolean;
+  addLogo?: boolean;
+  logoPosition?: TFaceSwapLogoPosition;
+  logoLanguage?: TFaceSwapLogoLanguage;
+  logoOpacity?: number;
+  logoText?: string;
 }
 
 export interface IFaceAnimationGenerateParams {
@@ -132,6 +146,17 @@ export const generateFaceSwap = async (params: IFaceSwapGenerateParams): Promise
   const data = await postJson(endpoint, {
     imageBase64: params.imageBase64,
     templateBase64: params.templateBase64,
+    sourceSimilarity: params.sourceSimilarity,
+    doRisk: params.doRisk,
+    faceType: params.faceType,
+    sourceLocation: params.sourceLocation,
+    templateLocation: params.templateLocation,
+    returnUrl: params.returnUrl,
+    addLogo: params.addLogo,
+    logoPosition: params.logoPosition,
+    logoLanguage: params.logoLanguage,
+    logoOpacity: params.logoOpacity,
+    logoText: params.logoText,
   });
   return requireImageUrl(data, "人脸替换完成。");
 };

@@ -56,6 +56,55 @@ function parseFaceSwapImages(body, res) {
   return { image, template };
 }
 
+function normalizeUnitInterval(value, fallback) {
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue)) return fallback;
+  return Math.min(1, Math.max(0, numericValue));
+}
+
+function normalizeOptionalUnitInterval(value) {
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue)) return undefined;
+  return Math.min(1, Math.max(0, numericValue));
+}
+
+function normalizeFaceSwapFaceType(value) {
+  return ["area", "l2r", "t2b"].includes(value) ? value : VOLC_VISUAL.FACE_SWAP_FACE_TYPE;
+}
+
+function normalizeFaceSwapLocation(value, fallback) {
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue)) return fallback;
+  return Math.min(3, Math.max(1, Math.round(numericValue)));
+}
+
+function normalizeLogoPosition(value) {
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue)) return 0;
+  return Math.min(3, Math.max(0, Math.round(numericValue)));
+}
+
+function normalizeLogoLanguage(value) {
+  const numericValue = Number(value);
+  return numericValue === 1 ? 1 : 0;
+}
+
+function buildFaceSwapLogoInfo(body) {
+  if (body?.addLogo !== true) return undefined;
+
+  const logoInfo = {
+    add_logo: true,
+    position: normalizeLogoPosition(body.logoPosition),
+    language: normalizeLogoLanguage(body.logoLanguage),
+    opacity: normalizeUnitInterval(body.logoOpacity, 1),
+  };
+  const logoText = typeof body.logoText === "string" ? body.logoText.trim() : "";
+  if (logoText) {
+    logoInfo.logo_text_content = logoText;
+  }
+  return logoInfo;
+}
+
 function sendVolcImageResult(res, imageUrl, message) {
   return res.json({
     imageUrl,
@@ -98,6 +147,13 @@ function registerFaceSwapV2Route(app) {
       bodyParams.set("template_base64", images.template);
       bodyParams.set("action_id", VOLC_FACE_SWAP_2.ACTION_ID);
       bodyParams.set("version", VOLC_FACE_SWAP_2.MODEL_VERSION);
+      const sourceSimilarity = normalizeOptionalUnitInterval(req.body?.sourceSimilarity);
+      if (sourceSimilarity !== undefined) {
+        bodyParams.set("source_similarity", String(sourceSimilarity));
+      }
+      if (req.body?.doRisk === true) {
+        bodyParams.set("do_risk", "true");
+      }
 
       const volcRes = await signedFormRequest(query, bodyParams);
       const data = await volcRes.json();
@@ -135,17 +191,24 @@ function registerFaceSwapV36Route(app) {
       const images = parseFaceSwapImages(req.body, res);
       if (!images) return;
 
+      const sourceSimilarity = normalizeOptionalUnitInterval(req.body?.sourceSimilarity);
+      const logoInfo = buildFaceSwapLogoInfo(req.body);
       const volcRes = await visualCvRequest(VOLC_VISUAL.FACE_SWAP_ACTION, {
         req_key: VOLC_VISUAL.FACE_SWAP_REQ_KEY,
         binary_data_base64: [images.image, images.template],
-        face_type: VOLC_VISUAL.FACE_SWAP_FACE_TYPE,
+        face_type: normalizeFaceSwapFaceType(req.body?.faceType),
         merge_infos: [
           {
-            location: VOLC_VISUAL.FACE_SWAP_SOURCE_LOCATION,
-            template_location: VOLC_VISUAL.FACE_SWAP_TEMPLATE_LOCATION,
+            location: normalizeFaceSwapLocation(req.body?.sourceLocation, VOLC_VISUAL.FACE_SWAP_SOURCE_LOCATION),
+            template_location: normalizeFaceSwapLocation(
+              req.body?.templateLocation,
+              VOLC_VISUAL.FACE_SWAP_TEMPLATE_LOCATION,
+            ),
           },
         ],
-        return_url: false,
+        ...(sourceSimilarity !== undefined ? { source_similarity: String(sourceSimilarity) } : {}),
+        ...(logoInfo ? { logo_info: logoInfo } : {}),
+        return_url: req.body?.returnUrl === true,
       });
 
       if (!validateVisualResult(volcRes, res, `接口错误: ${volcRes.code}`)) return;

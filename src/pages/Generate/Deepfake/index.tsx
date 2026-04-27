@@ -96,7 +96,24 @@ const DeepfakeGeneratePage = () => {
           throw new Error("无法读取驱动人脸，请重新上传");
         }
 
-        setResult(await generateFaceSwap({ imageBase64, templateBase64, model: values.model }));
+        setResult(
+          await generateFaceSwap({
+            imageBase64,
+            templateBase64,
+            model: values.model,
+            sourceSimilarity: values.faceSwapSourceSimilarity,
+            doRisk: values.faceSwapDoRisk,
+            faceType: values.faceSwapFaceType,
+            sourceLocation: values.faceSwapSourceLocation,
+            templateLocation: values.faceSwapTemplateLocation,
+            returnUrl: values.faceSwapReturnUrl,
+            addLogo: values.faceSwapAddLogo,
+            logoPosition: values.faceSwapLogoPosition,
+            logoLanguage: values.faceSwapLogoLanguage,
+            logoOpacity: values.faceSwapLogoOpacity,
+            logoText: values.faceSwapLogoText,
+          }),
+        );
         message.success("生成成功！");
         return;
       }
@@ -201,7 +218,7 @@ const DeepfakeGeneratePage = () => {
         </Paragraph>
       </div>
 
-      <Row gutter={[22, 22]} className="deepfake-workspace" align="stretch">
+      <Row gutter={[22, 22]} className="deepfake-workspace" align="top">
         <Col xs={COL_FULL_SPAN} lg={DEEPFAKE_CONFIG_LG_SPAN} className="deepfake-config-column">
           <DeepfakeGenerateForm
             form={form}

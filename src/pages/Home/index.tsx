@@ -248,7 +248,7 @@ const HomePage = () => {
             >
               <ThunderboltOutlined style={{ fontSize: 32, color: "var(--color-primary)", marginBottom: 10 }} />
               <Title level={2} style={{ color: "var(--color-primary)", marginBottom: 6, fontSize: 28 }}>
-                5+
+                7+
               </Title>
               <Text style={{ fontSize: 13 }}>生成模型</Text>
             </div>

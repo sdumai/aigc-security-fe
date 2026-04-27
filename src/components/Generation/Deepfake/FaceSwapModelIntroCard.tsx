@@ -47,7 +47,6 @@ export const FaceSwapModelIntroCard = ({ selectedModel }: IFaceSwapModelIntroCar
                   {strength}
                 </Tag>
               ))}
-              <Tag>{item.endpoint}</Tag>
             </Space>
           </div>
         );

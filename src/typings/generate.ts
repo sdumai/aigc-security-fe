@@ -14,6 +14,12 @@ export type TAttributeEditModel = "SeedEdit 3.0";
 
 export type TDeepfakeModel = TFaceSwapModel | TFaceAnimationModel | TAttributeEditModel;
 
+export type TFaceSwapFaceType = "area" | "l2r" | "t2b";
+
+export type TFaceSwapLogoPosition = "0" | "1" | "2" | "3";
+
+export type TFaceSwapLogoLanguage = "0" | "1";
+
 export type TSeedEditSeedMode = "random" | "fixed";
 
 export type TImageModel = "volc" | "stable-diffusion";
@@ -60,6 +66,17 @@ export interface IDeepfakeFormValues {
   model: TDeepfakeModel;
   fommPrompt?: string;
   editPrompt?: string;
+  faceSwapSourceSimilarity?: number;
+  faceSwapDoRisk?: boolean;
+  faceSwapFaceType?: TFaceSwapFaceType;
+  faceSwapSourceLocation?: number;
+  faceSwapTemplateLocation?: number;
+  faceSwapReturnUrl?: boolean;
+  faceSwapAddLogo?: boolean;
+  faceSwapLogoPosition?: TFaceSwapLogoPosition;
+  faceSwapLogoLanguage?: TFaceSwapLogoLanguage;
+  faceSwapLogoOpacity?: number;
+  faceSwapLogoText?: string;
   seedEditScale?: number;
   seedEditSeedMode?: TSeedEditSeedMode;
   seedEditSeed?: number;

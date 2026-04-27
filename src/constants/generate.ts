@@ -4,6 +4,9 @@ import type {
   TAttributeEditModel,
   TDeepfakeFunction,
   TDeepfakeModel,
+  TFaceSwapFaceType,
+  TFaceSwapLogoLanguage,
+  TFaceSwapLogoPosition,
   TFaceAnimationModel,
   TFaceSwapModel,
   TImageModel,
@@ -21,7 +24,7 @@ export const FACE_ANIMATION_MODEL: TFaceAnimationModel = "Seedance Lite I2V";
 
 export const ATTRIBUTE_EDIT_MODEL: TAttributeEditModel = "SeedEdit 3.0";
 
-export const DEEPFAKE_DEFAULT_MODEL: TDeepfakeModel = FACE_SWAP_MODEL_V2;
+export const DEEPFAKE_DEFAULT_MODEL: TDeepfakeModel = FACE_SWAP_MODEL_V36;
 
 export const FACE_ANIMATION_DEFAULT_PROMPT = "让图中人脸做自然的微笑和轻微点头动作";
 export const DEFAULT_IMAGE_MODEL = "volc";
@@ -34,6 +37,25 @@ export const DEFAULT_MODELSCOPE_FRAMES = "16";
 export const DEFAULT_MODELSCOPE_STEPS = "25";
 export const DEFAULT_MODELSCOPE_FRAME_COUNT = 16;
 export const DEFAULT_MODELSCOPE_INFERENCE_STEPS = 25;
+export const DEFAULT_FACE_SWAP_SOURCE_SIMILARITY = 0.5;
+export const MIN_FACE_SWAP_SOURCE_SIMILARITY = 0;
+export const MAX_FACE_SWAP_SOURCE_SIMILARITY = 1;
+export const FACE_SWAP_SOURCE_SIMILARITY_STEP = 0.05;
+export const DEFAULT_FACE_SWAP_DO_RISK = false;
+export const DEFAULT_FACE_SWAP_FACE_TYPE: TFaceSwapFaceType = "area";
+export const DEFAULT_FACE_SWAP_SOURCE_LOCATION = 1;
+export const DEFAULT_FACE_SWAP_TEMPLATE_LOCATION = 1;
+export const MIN_FACE_SWAP_LOCATION = 1;
+export const MAX_FACE_SWAP_LOCATION = 3;
+export const DEFAULT_FACE_SWAP_RETURN_URL = false;
+export const DEFAULT_FACE_SWAP_ADD_LOGO = false;
+export const DEFAULT_FACE_SWAP_LOGO_POSITION: TFaceSwapLogoPosition = "0";
+export const DEFAULT_FACE_SWAP_LOGO_LANGUAGE: TFaceSwapLogoLanguage = "0";
+export const DEFAULT_FACE_SWAP_LOGO_OPACITY = 1;
+export const MIN_FACE_SWAP_LOGO_OPACITY = 0;
+export const MAX_FACE_SWAP_LOGO_OPACITY = 1;
+export const FACE_SWAP_LOGO_OPACITY_STEP = 0.05;
+export const FACE_SWAP_LOGO_TEXT_MAX_LENGTH = 24;
 export const DEFAULT_SEEDEDIT_SCALE = 0.5;
 export const MIN_SEEDEDIT_SCALE = 0;
 export const MAX_SEEDEDIT_SCALE = 1;
@@ -76,7 +98,7 @@ export const I2V_REFERENCE_TOOLTIP = `按顺序对应提示词中的 [图1][图2
 export const I2V_UPLOAD_TEXT = `上传参考图（1～${I2V_MAX_IMAGE_COUNT} 张）`;
 
 export const DEEPFAKE_MODEL_OPTIONS: Record<TDeepfakeFunction, TDeepfakeModel[]> = {
-  faceswap: [FACE_SWAP_MODEL_V2, FACE_SWAP_MODEL_V36],
+  faceswap: [FACE_SWAP_MODEL_V36, FACE_SWAP_MODEL_V2],
   fomm: [FACE_ANIMATION_MODEL],
   stargan: [ATTRIBUTE_EDIT_MODEL],
 };
@@ -90,20 +112,20 @@ export const FACE_SWAP_MODEL_INTROS: Array<{
   tradeoff: string;
 }> = [
   {
-    model: FACE_SWAP_MODEL_V2,
-    version: "视觉智能 FaceSwap",
-    endpoint: "Action=FaceSwap",
-    summary: "使用成熟的表单网关完成人脸替换，输入源人脸与目标模板图后同步返回融合图 Base64。",
-    strengths: ["链路稳定", "响应直接", "适合单人替换"],
-    tradeoff: "能力偏基础，图片大小与模板限制更严格。",
-  },
-  {
     model: FACE_SWAP_MODEL_V36,
     version: "人像融合 3.6",
     endpoint: "Action=CVProcess",
     summary: "使用新版视觉处理网关，支持多人选脸、水印信息与更大的图片尺寸，融合边缘效果更自然。",
     strengths: ["边缘融合升级", "支持多人选脸", "可扩展水印与标识"],
     tradeoff: "质量更高但性能稍有折损。",
+  },
+  {
+    model: FACE_SWAP_MODEL_V2,
+    version: "视觉智能 FaceSwap",
+    endpoint: "Action=FaceSwap",
+    summary: "使用成熟的表单网关完成人脸替换，输入源人脸与目标模板图后同步返回融合图 Base64。",
+    strengths: ["链路稳定", "响应直接", "适合单人替换"],
+    tradeoff: "能力偏基础，图片大小与模板限制更严格。",
   },
 ];
 
@@ -122,6 +144,24 @@ export const DEEPFAKE_FUNCTION_OPTIONS: ISelectOption<TDeepfakeFunction>[] = [
 export const SEEDEDIT_SEED_MODE_OPTIONS: ISelectOption<TSeedEditSeedMode>[] = [
   { value: "random", label: "随机生成" },
   { value: "fixed", label: "固定复现" },
+];
+
+export const FACE_SWAP_FACE_TYPE_OPTIONS: ISelectOption<TFaceSwapFaceType>[] = [
+  { value: "area", label: "面积优先" },
+  { value: "l2r", label: "从左到右" },
+  { value: "t2b", label: "从上到下" },
+];
+
+export const FACE_SWAP_LOGO_POSITION_OPTIONS: ISelectOption<TFaceSwapLogoPosition>[] = [
+  { value: "0", label: "右下角" },
+  { value: "1", label: "左下角" },
+  { value: "2", label: "左上角" },
+  { value: "3", label: "右上角" },
+];
+
+export const FACE_SWAP_LOGO_LANGUAGE_OPTIONS: ISelectOption<TFaceSwapLogoLanguage>[] = [
+  { value: "0", label: "中文" },
+  { value: "1", label: "English" },
 ];
 
 export const DEEPFAKE_TARGET_TOOLTIPS: Record<TDeepfakeFunction, string> = {

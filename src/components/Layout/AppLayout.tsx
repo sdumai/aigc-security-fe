@@ -93,7 +93,7 @@ const AppLayout = ({ children }: AppLayoutProps) => {
           </div>
         </div>
         <div className="app-header-right">
-          <span className="app-header-stat">5+ 模型</span>
+          <span className="app-header-stat">7+ 模型</span>
           <span className="app-header-stat-divider" />
           <span className="app-header-stat">95%+ 准确率</span>
           <span className="app-header-stat-divider" />

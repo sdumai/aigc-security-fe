@@ -234,6 +234,9 @@ code {
 .app-content {
   display: block;
   flex: none;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
   margin: 0;
   padding: clamp(20px, 1.55vw, 28px);
   background: var(--color-bg-content);
@@ -282,7 +285,7 @@ code {
 .home-dscan-logo {
   width: 86px;
   height: 86px;
-  margin-bottom: 16px;
+  /* margin-bottom: 2cm; */
   overflow: visible;
   color: rgba(255, 255, 255, 0.96);
 }
@@ -336,6 +339,7 @@ code {
 
 .deepfake-workspace .ant-col {
   display: flex;
+  align-items: flex-start;
   min-width: 0;
 }
 
@@ -351,7 +355,7 @@ code {
 
 .deepfake-result-card.ant-card {
   width: 100%;
-  height: 100%;
+  min-height: 488px;
   display: flex;
   flex-direction: column;
   border: 1px solid rgba(44, 82, 130, 0.16);
@@ -375,7 +379,7 @@ code {
 }
 
 .deepfake-config-card .ant-card-body {
-  padding: 22px;
+  padding: clamp(18px, 1.7vw, 26px);
 }
 
 .deepfake-result-card .ant-card-body {
@@ -383,6 +387,14 @@ code {
   min-height: 0;
   display: flex;
   padding: 22px;
+}
+
+.deepfake-result-column {
+  align-self: flex-start;
+}
+
+.deepfake-result-column .deepfake-result-card {
+  position: static;
 }
 
 .deepfake-result-card .media-result-content {
@@ -438,7 +450,7 @@ code {
 
 .deepfake-result-card .media-result-empty {
   width: 100%;
-  min-height: 420px;
+  min-height: 348px;
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -450,7 +462,7 @@ code {
 
 .deepfake-result-card .media-result-loading {
   width: 100%;
-  min-height: 420px;
+  min-height: 348px;
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -487,43 +499,218 @@ code {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   grid-template-areas:
-    "uploads"
-    "controls";
-  gap: 16px;
+    "mode"
+    "uploads";
+  gap: 18px;
   align-items: start;
 }
 
 .deepfake-config-layout.has-model-guide {
-  grid-template-columns: max-content minmax(0, 1fr);
+  grid-template-columns: minmax(280px, 0.9fr) minmax(320px, 1.1fr);
   grid-template-areas:
+    "mode mode"
     "uploads guide"
-    "controls controls";
-  column-gap: 20px;
+    "model guide";
+  column-gap: clamp(20px, 2vw, 30px);
+  row-gap: 20px;
+}
+
+.deepfake-config-layout.has-model-guide.has-faceswap-advanced {
+  grid-template-areas:
+    "mode mode"
+    "uploads guide"
+    "model guide"
+    "advanced advanced";
 }
 
 .deepfake-config-layout.has-model-guide.has-prompt {
+  grid-template-columns: max-content minmax(260px, 1fr);
   grid-template-areas:
-    "uploads guide"
-    "prompt prompt"
-    "controls controls";
+    "mode mode"
+    "uploads model"
+    "uploads prompt"
+    "guide guide";
+}
+
+.deepfake-config-layout.has-model-guide.has-prompt.is-stargan {
+  grid-template-areas:
+    "mode mode"
+    "uploads model"
+    "uploads prompt"
+    "seedAdvanced seedAdvanced"
+    "guide guide";
 }
 
 .deepfake-config-form {
   min-width: 0;
 }
 
+.deepfake-mode-fields {
+  grid-area: mode;
+  min-width: 0;
+  padding: clamp(10px, 1vw, 14px) clamp(14px, 1.5vw, 20px);
+  border: 1px solid rgba(44, 82, 130, 0.16);
+  border-radius: var(--radius-md);
+  background: linear-gradient(180deg, rgba(248, 250, 252, 0.9) 0%, rgba(255, 255, 255, 0.98) 100%), #ffffff;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.92),
+    0 1px 3px rgba(30, 58, 95, 0.04);
+}
+
+.deepfake-mode-fields .ant-form-item {
+  width: 100%;
+  margin-bottom: 0;
+}
+
+.deepfake-mode-fields .ant-form-item-control,
+.deepfake-mode-fields .ant-form-item-control-input,
+.deepfake-mode-fields .ant-form-item-control-input-content {
+  min-width: 0;
+  width: 100%;
+  display: block;
+}
+
+.deepfake-mode-fields .ant-form-item-label {
+  padding-bottom: 6px;
+}
+
+.deepfake-mode-fields .ant-form-item-label > label {
+  color: var(--color-text);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.deepfake-function-tabs.ant-radio-group {
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: clamp(8px, 1vw, 14px);
+  align-items: stretch;
+}
+
+.deepfake-function-tabs .ant-radio-button-wrapper {
+  width: 100%;
+  height: auto;
+  min-height: 68px;
+  display: flex;
+  align-items: center;
+  padding: 10px 12px;
+  border: 1px solid rgba(44, 82, 130, 0.15);
+  border-radius: var(--radius-md);
+  background: #ffffff;
+  color: var(--color-text-secondary);
+  box-shadow: 0 1px 3px rgba(30, 58, 95, 0.04);
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease,
+    transform 0.2s ease,
+    background 0.2s ease;
+}
+
+.deepfake-function-tabs .ant-radio-button-wrapper::before {
+  display: none;
+}
+
+.deepfake-function-tabs .ant-radio-button-wrapper:hover {
+  border-color: rgba(44, 82, 130, 0.34);
+  color: var(--color-text);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(30, 58, 95, 0.08);
+}
+
+.deepfake-function-tabs .ant-radio-button-wrapper-checked:not(.ant-radio-button-wrapper-disabled) {
+  border-color: #2c5282;
+  background: linear-gradient(180deg, #f6fbff 0%, #ffffff 100%);
+  color: #1f3d60;
+  box-shadow:
+    inset 0 0 0 1px rgba(44, 82, 130, 0.2),
+    0 6px 18px rgba(30, 58, 95, 0.12);
+}
+
+.deepfake-function-tabs .ant-radio-button-wrapper-checked:not(.ant-radio-button-wrapper-disabled):hover {
+  border-color: #2c5282;
+  color: #1f3d60;
+}
+
+.deepfake-function-option {
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  line-height: 1.35;
+}
+
+.deepfake-function-icon {
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-md);
+  background: rgba(44, 82, 130, 0.08);
+  color: #2c5282;
+  font-size: 18px;
+}
+
+.deepfake-function-tabs .ant-radio-button-wrapper-checked .deepfake-function-icon {
+  background: #2c5282;
+  color: #ffffff;
+}
+
+.deepfake-function-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.deepfake-function-title {
+  overflow: hidden;
+  color: var(--color-text);
+  font-size: 15px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.deepfake-function-description {
+  overflow: hidden;
+  color: var(--color-text-muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .deepfake-upload-fields {
   grid-area: uploads;
   min-width: 0;
   width: 100%;
+  align-self: start;
 }
 
 .deepfake-config-layout.has-model-guide .deepfake-upload-fields {
-  width: max-content;
+  width: 100%;
 }
 
 .deepfake-upload-fields .ant-form-item {
-  margin-bottom: 30px;
+  margin-bottom: 0;
+}
+
+.deepfake-config-layout.has-model-guide .deepfake-upload-fields .ant-form-item {
+  margin-bottom: 0;
+}
+
+.deepfake-config-layout.is-faceswap .deepfake-upload-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(128px, max-content));
+  gap: 18px 28px;
+  align-items: start;
+}
+
+.deepfake-config-layout.is-faceswap .deepfake-upload-fields .ant-form-item {
+  margin-bottom: 0;
 }
 
 .deepfake-upload-fields .ant-form-item-label > label {
@@ -535,8 +722,8 @@ code {
   .ant-upload-list.ant-upload-list-picture-card
   .ant-upload-list-item-container,
 .deepfake-config-card .ant-upload-wrapper.ant-upload-picture-card-wrapper .ant-upload.ant-upload-select {
-  width: 124px;
-  height: 124px;
+  width: clamp(124px, 9vw, 148px);
+  height: clamp(124px, 9vw, 148px);
 }
 
 .deepfake-config-card .ant-upload-list-picture-card .ant-upload-list-item,
@@ -552,37 +739,206 @@ code {
 .deepfake-config-guide {
   grid-area: guide;
   min-width: 0;
-  padding-top: 2px;
+  padding-top: 0;
   justify-self: stretch;
+  align-self: stretch;
   max-width: 100%;
+}
+
+.deepfake-config-guide > .faceswap-model-card,
+.deepfake-config-guide > .deepfake-capability-card {
+  height: 100%;
+}
+
+.deepfake-model-fields {
+  grid-area: model;
+  min-width: 0;
+  align-self: start;
+  padding: 14px 18px 16px;
+  border: 1px solid rgba(44, 82, 130, 0.14);
+  border-radius: var(--radius-md);
+  background: linear-gradient(180deg, rgba(248, 250, 252, 0.74) 0%, rgba(255, 255, 255, 0.98) 100%);
+}
+
+.deepfake-model-fields .ant-form-item {
+  margin-bottom: 0;
+}
+
+.deepfake-model-fields .ant-form-item-control,
+.deepfake-model-fields .ant-form-item-control-input,
+.deepfake-model-fields .ant-form-item-control-input-content {
+  min-width: 0;
+  width: 100%;
+  display: block;
+}
+
+.deepfake-model-fields .ant-select {
+  width: 100%;
 }
 
 .deepfake-prompt-fields {
   grid-area: prompt;
   min-width: 0;
+  width: 100%;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 16px;
 }
 
 .deepfake-config-layout.is-stargan .deepfake-prompt-fields {
-  margin-top: -18px;
+  margin-top: 0;
 }
 
 .deepfake-prompt-fields .ant-form-item {
+  width: 100%;
   margin-bottom: 0;
 }
 
+.deepfake-prompt-fields .ant-form-item-control,
+.deepfake-prompt-fields .ant-form-item-control-input,
+.deepfake-prompt-fields .ant-form-item-control-input-content {
+  min-width: 0;
+  width: 100%;
+  display: block;
+}
+
+.deepfake-prompt-fields .ant-input-textarea,
 .deepfake-prompt-fields textarea.ant-input {
-  min-height: 86px;
+  width: 100%;
+  min-height: 104px;
+}
+
+.deepfake-prompt-fields .ant-input-textarea-show-count::after {
+  margin-top: 6px;
+  padding-right: 4px;
+}
+
+.faceswap-advanced-fields {
+  grid-area: advanced;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px clamp(22px, 2.2vw, 34px);
+  align-items: start;
+  padding: 18px 20px 20px;
+  border: 1px solid rgba(44, 82, 130, 0.12);
+  border-radius: var(--radius-md);
+  background: linear-gradient(180deg, rgba(248, 250, 252, 0.82) 0%, rgba(255, 255, 255, 0.98) 100%);
+}
+
+.faceswap-advanced-fields .ant-form-item {
+  min-width: 0;
+  margin-bottom: 0;
+}
+
+.faceswap-advanced-fields .ant-form-item-label > label {
+  color: var(--color-text);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.faceswap-advanced-fields .ant-slider {
+  margin: 7px 8px 28px;
+}
+
+.faceswap-similarity-field {
+  width: 100%;
+}
+
+.faceswap-similarity-field .ant-form-item-control,
+.faceswap-similarity-field .ant-form-item-control-input,
+.faceswap-similarity-field .ant-form-item-control-input-content {
+  min-width: 0;
+  width: 100%;
+  display: block;
+}
+
+.faceswap-similarity-field .ant-slider {
+  width: 100%;
+  max-width: 100%;
+  display: block;
+  margin: 8px 0 6px;
+}
+
+.faceswap-slider-scale {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--color-text-muted);
+  font-size: 12px;
+  line-height: 1.3;
+}
+
+.faceswap-advanced-fields .ant-slider-mark-text {
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
+.faceswap-advanced-fields .ant-radio-group {
+  display: flex;
+  flex-wrap: wrap;
+  max-width: 100%;
+}
+
+.faceswap-advanced-fields .ant-radio-button-wrapper {
+  min-width: 82px;
+  text-align: center;
+}
+
+.faceswap-face-index-fields {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(92px, 1fr));
+  gap: 14px;
+}
+
+.faceswap-face-index-fields .ant-input-number {
+  width: 100%;
+}
+
+.faceswap-logo-fields {
+  grid-column: 1 / -1;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(190px, 1fr));
+  gap: 14px 18px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(44, 82, 130, 0.1);
+}
+
+.faceswap-logo-fields .ant-select,
+.faceswap-logo-fields .ant-input {
+  width: 100%;
+}
+
+.faceswap-logo-fields .ant-form-item {
+  min-width: 0;
+  margin-bottom: 0;
+}
+
+.faceswap-logo-fields .ant-form-item-control,
+.faceswap-logo-fields .ant-form-item-control-input,
+.faceswap-logo-fields .ant-form-item-control-input-content {
+  min-width: 0;
+  width: 100%;
+  display: block;
+}
+
+.faceswap-logo-fields .ant-slider {
+  width: 100%;
+  max-width: 100%;
+  display: block;
+  margin: 8px 0 0;
 }
 
 .seededit-advanced-fields {
+  grid-area: seedAdvanced;
+  min-width: 0;
   display: grid;
   grid-template-columns: minmax(260px, 1fr) minmax(260px, 0.82fr);
-  gap: 14px 34px;
+  gap: 18px clamp(24px, 2.4vw, 40px);
   align-items: start;
-  padding: 14px 16px 16px;
+  padding: 18px 20px 20px;
   border: 1px solid rgba(44, 82, 130, 0.12);
   border-radius: var(--radius-md);
   background: linear-gradient(180deg, rgba(248, 250, 252, 0.82) 0%, rgba(255, 255, 255, 0.98) 100%);
@@ -590,11 +946,25 @@ code {
 
 .seededit-advanced-fields .ant-form-item-label > label {
   color: var(--color-text);
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
 }
 
+.seededit-advanced-fields .ant-form-item {
+  min-width: 0;
+  margin-bottom: 0;
+}
+
+.seededit-advanced-fields .ant-form-item-control,
+.seededit-advanced-fields .ant-form-item-control-input,
+.seededit-advanced-fields .ant-form-item-control-input-content {
+  min-width: 0;
+  width: 100%;
+  display: block;
+}
+
 .seededit-advanced-fields .ant-slider {
+  width: 100%;
   margin: 7px 8px 28px;
 }
 
@@ -626,38 +996,11 @@ code {
   max-width: 180px;
 }
 
-.deepfake-control-fields {
-  grid-area: controls;
-  min-width: 0;
-  display: grid;
-  grid-template-columns: minmax(320px, 0.9fr) minmax(280px, 1fr);
-  gap: 18px 22px;
-  align-items: start;
-  padding: 14px 16px;
-  border: 1px solid rgba(44, 82, 130, 0.14);
-  border-radius: var(--radius-md);
-  background: linear-gradient(180deg, rgba(248, 250, 252, 0.72) 0%, rgba(255, 255, 255, 0.96) 100%);
-}
-
-.deepfake-control-fields .ant-form-item {
-  margin-bottom: 0;
-}
-
-.deepfake-control-fields .ant-radio-group {
-  width: 100%;
-}
-
-.deepfake-control-fields .ant-radio-wrapper {
-  min-height: 28px;
-}
-
-.deepfake-control-fields .ant-select {
-  max-width: 440px;
-}
-
 .faceswap-model-card {
   width: 100%;
   max-width: 100%;
+  display: flex;
+  flex-direction: column;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
@@ -667,7 +1010,9 @@ code {
 
 .deepfake-capability-card {
   width: 100%;
-  min-height: 142px;
+  min-height: 160px;
+  display: flex;
+  flex-direction: column;
   border: 1px solid rgba(44, 82, 130, 0.14);
   border-radius: var(--radius-md);
   background: linear-gradient(180deg, #ffffff 0%, #f9fbfd 100%);
@@ -707,10 +1052,11 @@ code {
 }
 
 .deepfake-capability-body {
-  min-height: 102px;
+  flex: 1;
+  min-height: 118px;
   display: flex;
   align-items: center;
-  padding: 12px 16px 10px;
+  padding: 16px 18px;
 }
 
 .deepfake-capability-copy {
@@ -740,12 +1086,13 @@ code {
 .deepfake-capability-summary {
   max-width: 100%;
   margin: 7px 0 8px !important;
+  display: -webkit-box;
   overflow: hidden;
   color: var(--color-text-secondary);
   font-size: 13px;
-  line-height: 1.4;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.55;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .deepfake-capability-tags {
@@ -762,15 +1109,15 @@ code {
 }
 
 .faceswap-model-card-header {
-  min-height: 40px;
+  min-height: 30px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 8px 12px;
+  padding: 5px 10px;
   border-bottom: 1px solid var(--color-border-light);
   color: var(--color-text);
-  font-size: 15px;
+  font-size: 13px;
   font-weight: 600;
 }
 
@@ -783,6 +1130,7 @@ code {
 }
 
 .faceswap-model-grid {
+  flex: 1;
   display: grid;
   grid-template-columns: 1fr;
   gap: 8px;
@@ -793,8 +1141,8 @@ code {
   min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 5px;
-  padding: 9px 12px;
+  gap: 4px;
+  padding: 10px 12px;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
@@ -822,48 +1170,83 @@ code {
 }
 
 .faceswap-model-panel-header .ant-typography {
+  font-size: 14px;
+  line-height: 1.25;
   white-space: nowrap;
 }
 
 .faceswap-model-version {
-  margin-top: 1px;
+  margin-top: 2px;
   color: var(--color-text-muted);
   font-size: 12px;
+  line-height: 1.25;
 }
 
 .faceswap-model-summary {
   margin-bottom: 0 !important;
+  overflow: hidden;
   color: var(--color-text-secondary);
-  font-size: 13px;
-  line-height: 1.45;
+  font-size: 12px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .faceswap-model-tags {
-  min-height: 22px;
+  min-height: 18px;
+}
+
+.faceswap-model-tags .ant-tag {
+  margin-inline-end: 0;
+  padding-inline: 6px;
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  line-height: 18px;
 }
 
 @media (max-width: 1180px) {
   .deepfake-config-layout.has-model-guide {
     grid-template-columns: 1fr;
     grid-template-areas:
+      "mode"
       "uploads"
+      "guide";
+  }
+
+  .deepfake-config-layout.has-model-guide.has-faceswap-advanced {
+    grid-template-areas:
+      "mode"
+      "uploads"
+      "model"
       "guide"
-      "controls";
+      "advanced";
   }
 
   .deepfake-config-layout.has-model-guide.has-prompt {
     grid-template-areas:
+      "mode"
       "uploads"
-      "guide"
+      "model"
       "prompt"
-      "controls";
+      "guide";
+  }
+
+  .deepfake-config-layout.has-model-guide.has-prompt.is-stargan {
+    grid-template-areas:
+      "mode"
+      "uploads"
+      "model"
+      "prompt"
+      "seedAdvanced"
+      "guide";
   }
 
   .deepfake-config-layout.has-model-guide .deepfake-upload-fields {
     width: 100%;
   }
 
-  .deepfake-control-fields {
+  .faceswap-advanced-fields,
+  .faceswap-logo-fields {
     grid-template-columns: 1fr;
   }
 
@@ -872,7 +1255,18 @@ code {
   }
 }
 
+@media (min-width: 992px) {
+  .deepfake-result-column .deepfake-result-card {
+    position: sticky;
+    top: 8px;
+  }
+}
+
 @media (max-width: 900px) {
+  .deepfake-function-tabs.ant-radio-group {
+    grid-template-columns: 1fr;
+  }
+
   .faceswap-model-grid {
     grid-template-columns: 1fr;
   }
@@ -887,6 +1281,109 @@ code {
 
   .seededit-seed-input {
     max-width: 100%;
+  }
+
+  .deepfake-result-card.ant-card {
+    min-height: auto;
+  }
+}
+
+@media (max-width: 720px) {
+  .app-header {
+    padding: 0 14px;
+  }
+
+  .app-brand {
+    gap: 10px;
+  }
+
+  .app-brand-mark {
+    width: 34px;
+    height: 34px;
+  }
+
+  .app-brand-title {
+    font-size: 18px;
+  }
+
+  .app-brand-subtitle,
+  .app-header-right {
+    display: none;
+  }
+
+  .app-sider {
+    flex: 0 0 64px !important;
+    width: 64px !important;
+    min-width: 64px !important;
+    max-width: 64px !important;
+  }
+
+  .app-sider .ant-menu {
+    padding: 8px;
+  }
+
+  .app-sider .ant-menu-item,
+  .app-sider .ant-menu-submenu-title {
+    width: 48px;
+    height: 42px;
+    margin: 4px 0;
+    padding-inline: 0 !important;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .app-sider .ant-menu-submenu-title .ant-menu-item-icon,
+  .app-sider .ant-menu-item .ant-menu-item-icon {
+    margin-inline-end: 0;
+    font-size: 16px;
+  }
+
+  .app-sider .ant-menu-title-content,
+  .app-sider .ant-menu-submenu-arrow {
+    display: none;
+  }
+
+  .app-sider .ant-menu-sub.ant-menu-inline {
+    padding-left: 0;
+  }
+
+  .app-content-wrap {
+    padding: 10px;
+  }
+
+  .app-content {
+    padding: 14px;
+    border-radius: var(--radius-md);
+  }
+
+  .deepfake-config-card .ant-card-head,
+  .deepfake-result-card .ant-card-head {
+    padding: 0 14px;
+  }
+
+  .deepfake-config-card .ant-card-head-wrapper {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .deepfake-config-card .ant-card-extra {
+    margin-inline-start: 0;
+    padding: 0 0 12px;
+  }
+
+  .deepfake-config-card .ant-card-body,
+  .deepfake-result-card .ant-card-body {
+    padding: 14px;
+  }
+
+  .deepfake-generate-action {
+    min-width: 104px;
+  }
+
+  .deepfake-config-layout.is-faceswap .deepfake-upload-fields {
+    grid-template-columns: 1fr;
   }
 }
 
