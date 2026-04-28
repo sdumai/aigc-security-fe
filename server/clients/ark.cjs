@@ -48,18 +48,36 @@ function videoChat(videoUrl, systemPrompt) {
   return chatCompletion([{ type: "video_url", video_url: { url: videoUrl } }], systemPrompt);
 }
 
-function createImageGenerationTask({ prompt, size, watermark }) {
+function createImageGenerationTask({
+  model,
+  prompt,
+  size,
+  responseFormat = "url",
+  outputFormat,
+  watermark,
+  optimizePrompt,
+}) {
+  const body = {
+    model: model || config.ark.imageModel,
+    prompt,
+    size,
+    n: DEFAULT_IMAGE_COUNT,
+    response_format: responseFormat,
+    watermark: !!watermark,
+  };
+
+  if (outputFormat) {
+    body.output_format = outputFormat;
+  }
+
+  if (optimizePrompt) {
+    body.optimize_prompt_options = { mode: "standard" };
+  }
+
   return fetch(arkUrl(ARK_IMAGE_GENERATION_PATH), {
     method: "POST",
     headers: authHeaders(),
-    body: JSON.stringify({
-      model: config.ark.imageModel,
-      prompt,
-      size,
-      n: DEFAULT_IMAGE_COUNT,
-      response_format: "url",
-      watermark: !!watermark,
-    }),
+    body: JSON.stringify(body),
   });
 }
 

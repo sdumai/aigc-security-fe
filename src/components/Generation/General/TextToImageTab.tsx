@@ -1,15 +1,21 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Button, Card, Col, Form, Input, message, Row, Select, Switch, Typography } from "antd";
-import { PictureOutlined, ThunderboltOutlined } from "@ant-design/icons";
+import { Button, Card, Col, Form, Input, message, Row, Segmented, Select, Space, Switch, Typography } from "antd";
+import { FileImageOutlined, PictureOutlined, SlidersOutlined, ThunderboltOutlined } from "@ant-design/icons";
 
 import {
+  ARK_IMAGE_MODEL_SIZE_OPTIONS,
+  DEFAULT_IMAGE_OPTIMIZE_PROMPT,
   DEFAULT_IMAGE_MODEL,
+  DEFAULT_IMAGE_OUTPUT_FORMAT,
+  DEFAULT_IMAGE_RESPONSE_FORMAT,
   DEFAULT_IMAGE_SIZE,
   DEFAULT_TEXTAREA_ROWS,
   IMAGE_MODEL_OPTIONS,
-  IMAGE_SIZE_OPTIONS,
+  IMAGE_OUTPUT_FORMAT_OPTIONS,
+  IMAGE_RESPONSE_FORMAT_OPTIONS,
   PROMPT_MAX_LENGTH,
+  STABLE_DIFFUSION_IMAGE_SIZE_OPTIONS,
   STABLE_DIFFUSION_MODEL_HELP_TEXT,
   TEXT_TO_IMAGE_PROMPT_PLACEHOLDER,
   TITLE_PROMPT_PREVIEW_LENGTH,
@@ -40,13 +46,32 @@ const { TextArea } = Input;
 export const TextToImageTab = () => {
   const navigate = useNavigate();
   const [form] = Form.useForm<ITextToImageFormValues>();
-  const imageModel = Form.useWatch("imageModel", form);
+  const watchedImageModel = Form.useWatch("imageModel", form);
+  const imageModel = watchedImageModel || DEFAULT_IMAGE_MODEL;
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<IImageGenerateResult | null>(null);
+  const isStableDiffusion = imageModel === "stable-diffusion";
+  const isSeedream5 = imageModel === "volc";
+  const isArkImageModel = !isStableDiffusion;
+  const imageSizeOptions = useMemo(() => {
+    if (imageModel === "stable-diffusion") {
+      return STABLE_DIFFUSION_IMAGE_SIZE_OPTIONS;
+    }
+
+    return ARK_IMAGE_MODEL_SIZE_OPTIONS[imageModel] || ARK_IMAGE_MODEL_SIZE_OPTIONS.volc;
+  }, [imageModel]);
+
+  useEffect(() => {
+    const currentSize = form.getFieldValue("size");
+    if (!imageSizeOptions.some((option) => option.value === currentSize)) {
+      form.setFieldValue("size", imageSizeOptions[0]?.value || DEFAULT_IMAGE_SIZE);
+    }
+  }, [form, imageSizeOptions]);
 
   const handleGenerate = async () => {
     try {
       const values = await form.validateFields();
+      const shouldUseArkOptions = values.imageModel !== "stable-diffusion";
       setLoading(true);
       setResult(null);
       setResult(
@@ -54,7 +79,10 @@ export const TextToImageTab = () => {
           model: values.imageModel,
           prompt: values.prompt,
           size: values.size,
+          responseFormat: shouldUseArkOptions ? values.responseFormat : undefined,
+          outputFormat: values.imageModel === "volc" ? values.outputFormat : undefined,
           watermark: values.watermark,
+          optimizePrompt: shouldUseArkOptions ? values.optimizePrompt : undefined,
         }),
       );
       message.success("图像生成成功！");
@@ -104,8 +132,19 @@ export const TextToImageTab = () => {
   return (
     <Row gutter={GRID_GUTTER}>
       <Col xs={COL_FULL_SPAN} lg={COL_HALF_LG_SPAN}>
-        <Card title="文生图参数" bordered={false}>
-          <Form form={form} layout="vertical" initialValues={{ imageModel: DEFAULT_IMAGE_MODEL, size: DEFAULT_IMAGE_SIZE, watermark: true }}>
+        <Card title="文生图参数" bordered={false} className="text-to-image-config-card">
+          <Form
+            form={form}
+            layout="vertical"
+            initialValues={{
+              imageModel: DEFAULT_IMAGE_MODEL,
+              size: DEFAULT_IMAGE_SIZE,
+              responseFormat: DEFAULT_IMAGE_RESPONSE_FORMAT,
+              outputFormat: DEFAULT_IMAGE_OUTPUT_FORMAT,
+              watermark: true,
+              optimizePrompt: DEFAULT_IMAGE_OPTIMIZE_PROMPT,
+            }}
+          >
             <Form.Item
               label="生成模型"
               name="imageModel"
@@ -135,22 +174,53 @@ export const TextToImageTab = () => {
               rules={[{ required: true, message: "请选择尺寸" }]}
             >
               <Select>
-                {IMAGE_SIZE_OPTIONS.map((option) => (
+                {imageSizeOptions.map((option) => (
                   <Select.Option key={option.value} value={option.value}>
                     {option.label}
                   </Select.Option>
                 ))}
               </Select>
             </Form.Item>
-            <Form.Item label="水印" name="watermark" valuePropName="checked">
-              <Switch checkedChildren="开启" unCheckedChildren="关闭" />
-            </Form.Item>
+            {isArkImageModel && (
+              <div className="text-to-image-advanced">
+                <div className="text-to-image-advanced-title">
+                  <Space size={8}>
+                    <SlidersOutlined />
+                    <span>生成控制</span>
+                  </Space>
+                </div>
+                <Row gutter={[12, 12]}>
+                  <Col xs={24} md={12}>
+                    <Form.Item label="返回格式" name="responseFormat" tooltip="URL 链接 24 小时内有效；Base64 适合本地留存">
+                      <Segmented block options={IMAGE_RESPONSE_FORMAT_OPTIONS} />
+                    </Form.Item>
+                  </Col>
+                  {isSeedream5 && (
+                    <Col xs={24} md={12}>
+                      <Form.Item label="图片格式" name="outputFormat" tooltip="Seedream 5.0 支持 JPEG / PNG 输出">
+                        <Segmented block options={IMAGE_OUTPUT_FORMAT_OPTIONS} />
+                      </Form.Item>
+                    </Col>
+                  )}
+                  <Col xs={24} md={12}>
+                    <Form.Item label="水印" name="watermark" valuePropName="checked">
+                      <Switch checkedChildren="开启" unCheckedChildren="关闭" />
+                    </Form.Item>
+                  </Col>
+                  <Col xs={24} md={12}>
+                    <Form.Item label="提示词优化" name="optimizePrompt" valuePropName="checked" tooltip="使用标准优化模式增强提示词表达">
+                      <Switch checkedChildren="标准" unCheckedChildren="关闭" />
+                    </Form.Item>
+                  </Col>
+                </Row>
+              </div>
+            )}
             <Form.Item>
               <Button
                 type="primary"
                 size="large"
                 block
-                icon={<ThunderboltOutlined />}
+                icon={loading ? <FileImageOutlined /> : <ThunderboltOutlined />}
                 loading={loading}
                 onClick={handleGenerate}
               >
@@ -163,6 +233,7 @@ export const TextToImageTab = () => {
 
       <Col xs={COL_FULL_SPAN} lg={COL_HALF_LG_SPAN}>
         <MediaResultCard
+          className="text-to-image-result-card"
           title="生成结果"
           loading={loading}
           loadingText="正在生成图像，请稍候..."

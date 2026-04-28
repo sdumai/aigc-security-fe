@@ -6,6 +6,7 @@ const DEFAULTS = {
   VOLC_ARK_BASE: "https://ark.cn-beijing.volces.com/api/v3",
   VOLC_ARK_I2V_MODEL: "doubao-seedance-1-0-lite-i2v-250428",
   VOLC_ARK_IMAGE_MODEL: "doubao-seedream-5-0-260128",
+  VOLC_ARK_IMAGE_MODEL_4_5: "doubao-seedream-4-5-251128",
   VOLC_ARK_T2V_MODEL: "doubao-seedance-1-0-lite-t2v-250428",
   UNIVERSAL_FAKE_DETECT_URL: "http://127.0.0.1:8008",
   STABLE_DIFFUSION_SERVICE_URL: "http://127.0.0.1:8009",
@@ -53,6 +54,14 @@ const config = {
     baseUrl: stripTrailingSlash(envOrDefault(DEFAULTS.VOLC_ARK_BASE, "VOLC_ARK_BASE")),
     i2vModel: envOrDefault(DEFAULTS.VOLC_ARK_I2V_MODEL, "VOLC_ARK_I2V_MODEL", "VITE_VOLC_ARK_I2V_MODEL"),
     imageModel: envOrDefault(DEFAULTS.VOLC_ARK_IMAGE_MODEL, "VOLC_ARK_IMAGE_MODEL", "VITE_VOLC_ARK_IMAGE_MODEL"),
+    imageModels: {
+      volc: envOrDefault(DEFAULTS.VOLC_ARK_IMAGE_MODEL, "VOLC_ARK_IMAGE_MODEL", "VITE_VOLC_ARK_IMAGE_MODEL"),
+      "volc-seedream-4-5": envOrDefault(
+        DEFAULTS.VOLC_ARK_IMAGE_MODEL_4_5,
+        "VOLC_ARK_IMAGE_MODEL_4_5",
+        "VITE_VOLC_ARK_IMAGE_MODEL_4_5",
+      ),
+    },
     t2vModel: envOrDefault(DEFAULTS.VOLC_ARK_T2V_MODEL, "VOLC_ARK_T2V_MODEL", "VITE_VOLC_ARK_T2V_MODEL"),
   },
   localServices: {

@@ -14,13 +14,14 @@ export const handlers = [
   // 通用图像生成（可在此对接第三方文生图 API，或由真实后端代理）
   http.post("/api/generate/image", async ({ request }) => {
     await delay(1200);
-    const body = (await request.json()) as { prompt?: string; size?: string };
+    const body = (await request.json()) as { prompt?: string; size?: string; responseFormat?: string };
     // 开发环境返回占位图；生产环境应由后端调用第三方 API 后返回真实 imageUrl
     const size = body?.size?.replace("x", "/") || "768/768";
     return HttpResponse.json({
       success: true,
       imageUrl: `https://picsum.photos/seed/${encodeURIComponent(body?.prompt || "default")}/${size}`,
       message: "图像生成成功",
+      format: "url",
     });
   }),
 

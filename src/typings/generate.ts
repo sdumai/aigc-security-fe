@@ -22,7 +22,11 @@ export type TFaceSwapLogoLanguage = "0" | "1";
 
 export type TSeedEditSeedMode = "random" | "fixed";
 
-export type TImageModel = "volc" | "stable-diffusion";
+export type TImageModel = "volc" | "volc-seedream-4-5" | "stable-diffusion";
+
+export type TImageResponseFormat = "url" | "b64_json";
+
+export type TImageOutputFormat = "jpeg" | "png";
 
 export type TVideoModel = "volc" | "modelscope";
 
@@ -86,7 +90,10 @@ export interface ITextToImageFormValues {
   imageModel: TImageModel;
   prompt: string;
   size: string;
+  responseFormat: TImageResponseFormat;
+  outputFormat: TImageOutputFormat;
   watermark: boolean;
+  optimizePrompt: boolean;
 }
 
 export interface ITextToVideoFormValues {

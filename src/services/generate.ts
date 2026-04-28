@@ -12,7 +12,9 @@ import type {
   TFaceSwapFaceType,
   TFaceSwapLogoLanguage,
   TFaceSwapLogoPosition,
+  TImageOutputFormat,
   TImageModel,
+  TImageResponseFormat,
   TVideoModel,
 } from "@/typings/generate";
 import { apiBase } from "@/utils/apiBase";
@@ -59,7 +61,10 @@ export interface ITextToImageGenerateParams {
   model: TImageModel;
   prompt: string;
   size: string;
+  responseFormat?: TImageResponseFormat;
+  outputFormat?: TImageOutputFormat;
   watermark: boolean;
+  optimizePrompt?: boolean;
 }
 
 export interface ITextToVideoGenerateParams {
@@ -175,10 +180,15 @@ export const generateSeedEdit = async (params: ISeedEditGenerateParams): Promise
 
 export const generateTextToImage = async (params: ITextToImageGenerateParams): Promise<IImageGenerateResult> => {
   const modelOption = IMAGE_MODEL_OPTIONS.find((option) => option.value === params.model);
+  const isSeedream5 = params.model === "volc";
   const data = await postJson(modelOption?.endpoint || "/api/generate/image", {
+    model: params.model,
     prompt: params.prompt,
     size: params.size,
+    responseFormat: params.responseFormat,
+    outputFormat: isSeedream5 && params.outputFormat === "png" ? params.outputFormat : undefined,
     watermark: params.watermark,
+    optimizePrompt: params.optimizePrompt,
   });
 
   return requireImageUrl(data, "图像生成成功！");

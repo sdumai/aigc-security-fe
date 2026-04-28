@@ -113,6 +113,39 @@ function sendVolcImageResult(res, imageUrl, message) {
   });
 }
 
+function resolveArkImageModel(model) {
+  const modelKey = typeof model === "string" && model.trim() ? model.trim() : "volc";
+  return config.ark.imageModels[modelKey] || null;
+}
+
+function normalizeArkImageResponseFormat(format) {
+  return ["url", "b64_json"].includes(format) ? format : "url";
+}
+
+function normalizeArkImageOutputFormat(format) {
+  return ["jpeg", "png"].includes(format) ? format : undefined;
+}
+
+function normalizeArkImageOptimizePrompt(value) {
+  return value === true;
+}
+
+function extractArkGeneratedImage(data, outputFormat) {
+  const firstImage = data?.data?.[0];
+  const imageUrl = typeof firstImage?.url === "string" ? firstImage.url.trim() : "";
+  if (imageUrl) {
+    return { imageUrl, format: "url" };
+  }
+
+  const base64Image = typeof firstImage?.b64_json === "string" ? firstImage.b64_json.replace(/\s/g, "") : "";
+  if (base64Image) {
+    const mime = outputFormat === "png" ? "image/png" : "image/jpeg";
+    return { imageUrl: `data:${mime};base64,${base64Image}`, format: "data_url" };
+  }
+
+  return null;
+}
+
 function validateVisualResult(volcRes, res, fallback) {
   if (!volcRes.ok) {
     const message = volcRes.request_id ? `${volcRes.message}（request_id: ${volcRes.request_id}）` : volcRes.message;
@@ -419,16 +452,26 @@ function registerArkImageRoute(app) {
     try {
       if (requireArkApiKey(res)) return;
 
-      const { prompt, size, watermark } = req.body || {};
+      const { model, prompt, size, responseFormat, outputFormat, watermark, optimizePrompt } = req.body || {};
       const promptText = typeof prompt === "string" ? prompt.trim() : "";
       if (!promptText) {
         return sendBadRequest(res, "需要 prompt（提示词）");
       }
+      const normalizedResponseFormat = normalizeArkImageResponseFormat(responseFormat);
+      const normalizedOutputFormat = normalizeArkImageOutputFormat(outputFormat);
+      const modelId = resolveArkImageModel(model);
+      if (!modelId) {
+        return sendBadRequest(res, "不支持的文生图模型");
+      }
 
       const resFetch = await createImageGenerationTask({
+        model: modelId,
         prompt: promptText,
         size: size || DEFAULT_IMAGE_SIZE,
+        responseFormat: normalizedResponseFormat,
+        outputFormat: normalizedOutputFormat,
         watermark,
+        optimizePrompt: normalizeArkImageOptimizePrompt(optimizePrompt),
       });
       if (!resFetch.ok) {
         const errData = await resFetch.json().catch(() => ({}));
@@ -436,9 +479,9 @@ function registerArkImageRoute(app) {
       }
 
       const data = await resFetch.json();
-      const imageUrl = data?.data?.[0]?.url;
-      if (!imageUrl) return sendInternalError(res, "未返回图片地址");
-      res.json({ imageUrl, message: "图像生成成功！" });
+      const image = extractArkGeneratedImage(data, normalizedOutputFormat);
+      if (!image) return sendInternalError(res, "未返回图片数据");
+      res.json({ imageUrl: image.imageUrl, message: "图像生成成功！", format: image.format });
     } catch (err) {
       console.error("Image gen error:", err);
       sendInternalError(res, getErrorMessage(err, "图像生成失败"));

@@ -9,7 +9,9 @@ import type {
   TFaceSwapLogoPosition,
   TFaceAnimationModel,
   TFaceSwapModel,
+  TImageOutputFormat,
   TImageModel,
+  TImageResponseFormat,
   TSeedEditSeedMode,
   TVideoModel,
 } from "@/typings/generate";
@@ -30,6 +32,9 @@ export const FACE_ANIMATION_DEFAULT_PROMPT = "让图中人脸做自然的微笑�
 export const DEFAULT_IMAGE_MODEL = "volc";
 export const DEFAULT_VIDEO_MODEL = "volc";
 export const DEFAULT_IMAGE_SIZE = "2K";
+export const DEFAULT_IMAGE_RESPONSE_FORMAT: TImageResponseFormat = "url";
+export const DEFAULT_IMAGE_OUTPUT_FORMAT: TImageOutputFormat = "jpeg";
+export const DEFAULT_IMAGE_OPTIMIZE_PROMPT = false;
 export const DEFAULT_VIDEO_RATIO = "16:9";
 export const DEFAULT_T2V_DURATION = "5";
 export const DEFAULT_I2V_DURATION = "5";
@@ -173,6 +178,11 @@ export const DEEPFAKE_TARGET_TOOLTIPS: Record<TDeepfakeFunction, string> = {
 export const IMAGE_MODEL_OPTIONS: IModelOption<TImageModel>[] = [
   { value: "volc", label: "Seedream 5.0", endpoint: "/api/generate/image" },
   {
+    value: "volc-seedream-4-5",
+    label: "Seedream 4.5",
+    endpoint: "/api/generate/image",
+  },
+  {
     value: "stable-diffusion",
     label: "Stable Diffusion",
     endpoint: "/api/generate/image-stable-diffusion",
@@ -187,7 +197,27 @@ export const VIDEO_MODEL_OPTIONS: IModelOption<TVideoModel>[] = [
 export const IMAGE_SIZE_OPTIONS: ISelectOption[] = [
   { value: "1K", label: "1K" },
   { value: "2K", label: "2K" },
+  { value: "3K", label: "3K" },
   { value: "4K", label: "4K" },
+];
+
+export const ARK_IMAGE_MODEL_SIZE_OPTIONS: Record<Exclude<TImageModel, "stable-diffusion">, ISelectOption[]> = {
+  volc: IMAGE_SIZE_OPTIONS.filter((option) => ["2K", "3K", "4K"].includes(option.value)),
+  "volc-seedream-4-5": IMAGE_SIZE_OPTIONS.filter((option) => ["2K", "4K"].includes(option.value)),
+};
+
+export const STABLE_DIFFUSION_IMAGE_SIZE_OPTIONS = IMAGE_SIZE_OPTIONS.filter((option) =>
+  ["1K", "2K", "4K"].includes(option.value),
+);
+
+export const IMAGE_RESPONSE_FORMAT_OPTIONS: ISelectOption<TImageResponseFormat>[] = [
+  { value: "url", label: "URL" },
+  { value: "b64_json", label: "Base64" },
+];
+
+export const IMAGE_OUTPUT_FORMAT_OPTIONS: ISelectOption<TImageOutputFormat>[] = [
+  { value: "jpeg", label: "JPEG" },
+  { value: "png", label: "PNG" },
 ];
 
 export const VIDEO_RATIO_OPTIONS: ISelectOption[] = [
