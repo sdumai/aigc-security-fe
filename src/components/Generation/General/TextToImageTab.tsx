@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button, Card, Col, Form, Input, message, Row, Segmented, Select, Space, Switch, Typography } from "antd";
-import { FileImageOutlined, PictureOutlined, SlidersOutlined, ThunderboltOutlined } from "@ant-design/icons";
+import { FileImageOutlined, SlidersOutlined, ThunderboltOutlined } from "@ant-design/icons";
 
 import {
   ARK_IMAGE_MODEL_SIZE_OPTIONS,
@@ -26,11 +26,9 @@ import {
   COL_FULL_SPAN,
   COMPACT_HELP_TEXT_MARGIN_BOTTOM,
   COMPACT_HELP_TEXT_MARGIN_TOP,
-  EMPTY_ICON_SIZE,
   GRID_GUTTER,
   MESSAGE_DURATION_SECONDS,
   MESSAGE_LOADING_DURATION_FOREVER,
-  MUTED_ICON_COLOR,
   SAVE_NAVIGATION_DELAY_MS,
 } from "@/constants/ui";
 import { MediaResultCard } from "@/components/Generation/common/MediaResultCard";
@@ -251,7 +249,6 @@ export const TextToImageTab = () => {
           title="生成结果"
           loading={loading}
           loadingText="正在生成图像，请稍候..."
-          emptyIcon={<PictureOutlined style={{ fontSize: EMPTY_ICON_SIZE, color: MUTED_ICON_COLOR }} />}
           emptyText="图像将在生成后显示在这里"
           result={result}
           imageAlt="生成的图像"

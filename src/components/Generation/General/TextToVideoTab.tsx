@@ -16,7 +16,7 @@ import {
   Switch,
   Typography,
 } from "antd";
-import { ThunderboltOutlined, VideoCameraOutlined } from "@ant-design/icons";
+import { ThunderboltOutlined } from "@ant-design/icons";
 
 import {
   DEFAULT_MODELSCOPE_FRAMES,
@@ -60,11 +60,9 @@ import {
   COL_FULL_SPAN,
   COMPACT_HELP_TEXT_MARGIN_BOTTOM,
   COMPACT_HELP_TEXT_MARGIN_TOP,
-  EMPTY_ICON_SIZE,
   GRID_GUTTER,
   MESSAGE_DURATION_SECONDS,
   MESSAGE_LOADING_DURATION_FOREVER,
-  MUTED_ICON_COLOR,
   SAVE_NAVIGATION_DELAY_MS,
 } from "@/constants/ui";
 import { MediaResultCard } from "@/components/Generation/common/MediaResultCard";
@@ -440,7 +438,6 @@ export const TextToVideoTab = () => {
           className="text-to-image-result-card text-to-video-result-card"
           loading={loading}
           loadingText="正在生成视频，这可能需要较长时间..."
-          emptyIcon={<VideoCameraOutlined style={{ fontSize: EMPTY_ICON_SIZE, color: MUTED_ICON_COLOR }} />}
           emptyText="视频将在生成后显示在这里"
           result={result}
           videoSrc={previewSrc}

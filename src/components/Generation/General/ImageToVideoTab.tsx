@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button, Card, Col, Form, Input, message, Row, Select } from "antd";
-import { ThunderboltOutlined, VideoCameraOutlined } from "@ant-design/icons";
+import { ThunderboltOutlined } from "@ant-design/icons";
 import type { UploadFile } from "antd";
 
 import {
@@ -22,11 +22,9 @@ import {
 import { DATA_OUTPUT_ROUTE } from "@/constants/routes";
 import {
   COL_FULL_SPAN,
-  EMPTY_ICON_SIZE,
   GRID_GUTTER,
   MESSAGE_DURATION_SECONDS,
   MESSAGE_LOADING_DURATION_FOREVER,
-  MUTED_ICON_COLOR,
   SAVE_NAVIGATION_DELAY_MS,
 } from "@/constants/ui";
 import { ImagePreviewModal } from "@/components/Generation/common/ImagePreviewModal";
@@ -208,7 +206,6 @@ export const ImageToVideoTab = () => {
             title="生成结果"
             loading={loading}
             loadingText="正在生成视频，请稍候..."
-            emptyIcon={<VideoCameraOutlined style={{ fontSize: EMPTY_ICON_SIZE, color: MUTED_ICON_COLOR }} />}
             emptyText="图生视频结果将显示在这里"
             result={result}
             onDownload={handleDownload}

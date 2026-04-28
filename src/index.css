@@ -704,6 +704,14 @@ code {
 .text-to-image-result-card .media-result-empty,
 .text-to-image-result-card .media-result-loading {
   width: 100%;
+  min-height: 348px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border: 1px dashed rgba(44, 82, 130, 0.22);
+  background: linear-gradient(180deg, #fbfcfe 0%, #f7f9fc 100%) !important;
 }
 
 .text-to-image-result-card .media-result-preview-shell {
