@@ -33,6 +33,8 @@ const {
   toImageDataUrl,
 } = require("../utils/media.cjs");
 
+const SEEDANCE_2_ACCESS_KEY = "seedance_pwd";
+
 function requireVolcCredentials(res, message) {
   if (config.volc.accessKey && config.volc.secretKey) return false;
   sendBadRequest(res, message);
@@ -116,6 +118,44 @@ function sendVolcImageResult(res, imageUrl, message) {
 function resolveArkImageModel(model) {
   const modelKey = typeof model === "string" && model.trim() ? model.trim() : "volc";
   return config.ark.imageModels[modelKey] || null;
+}
+
+function resolveArkT2vModel(model) {
+  const modelKey = typeof model === "string" && model.trim() ? model.trim() : "volc";
+  return config.ark.t2vModels?.[modelKey] || null;
+}
+
+function normalizeArkT2vRatio(value, isModernSeedance) {
+  const allowed = isModernSeedance
+    ? ["adaptive", "16:9", "4:3", "1:1", "3:4", "9:16", "21:9"]
+    : ["16:9", "1:1", "9:16"];
+  return allowed.includes(value) ? value : isModernSeedance ? "adaptive" : DEFAULT_VIDEO_RATIO;
+}
+
+function normalizeArkT2vResolution(value, modelKey) {
+  const allowed = modelKey === "volc-seedance-1-5-pro" ? ["480p", "720p", "1080p"] : ["480p", "720p"];
+  return allowed.includes(value) ? value : "720p";
+}
+
+function normalizeArkT2vDuration(value, modelKey) {
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue)) return DEFAULT_VIDEO_DURATION_SECONDS;
+  const roundedValue = Math.round(numericValue);
+  if (modelKey === "volc-seedance-2-fast") {
+    if (roundedValue === -1) return -1;
+    return Math.min(15, Math.max(4, roundedValue));
+  }
+  if (modelKey === "volc-seedance-1-5-pro") {
+    if (roundedValue === -1) return -1;
+    return Math.min(12, Math.max(4, roundedValue));
+  }
+  return Math.min(12, Math.max(2, roundedValue));
+}
+
+function normalizeArkT2vSeed(value) {
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue)) return -1;
+  return Math.min(4294967295, Math.max(-1, Math.round(numericValue)));
 }
 
 function normalizeArkImageResponseFormat(format) {
@@ -607,18 +647,34 @@ function registerTextToVideoRoute(app) {
     try {
       if (requireArkApiKey(res)) return;
 
-      const { prompt, ratio, duration } = req.body || {};
+      const { model, prompt, ratio, duration, resolution, seed, generateAudio, watermark, seedanceAccessKey } = req.body || {};
       const promptText = typeof prompt === "string" ? prompt.trim() : "";
       if (!promptText) {
         return sendBadRequest(res, "需要 prompt（提示词）");
       }
-
-      const createRes = await createVideoGenerationTask({
-        model: config.ark.t2vModel,
+      const modelId = resolveArkT2vModel(model);
+      if (!modelId) {
+        return sendBadRequest(res, "不支持的文生视频模型");
+      }
+      const isSeedance2Fast = model === "volc-seedance-2-fast";
+      if (isSeedance2Fast && seedanceAccessKey !== SEEDANCE_2_ACCESS_KEY) {
+        return sendBadRequest(res, "Doubao-Seedance-2.0-fast 需要作者授权口令");
+      }
+      const isModernSeedance = model === "volc-seedance-1-5-pro" || isSeedance2Fast;
+      const taskBody = {
+        model: modelId,
         content: [{ type: "text", text: promptText }],
-        ratio: ratio || DEFAULT_VIDEO_RATIO,
-        duration: Number(duration) || DEFAULT_VIDEO_DURATION_SECONDS,
-      });
+        ratio: normalizeArkT2vRatio(ratio, isModernSeedance),
+        duration: normalizeArkT2vDuration(duration, model),
+      };
+      if (isModernSeedance) {
+        taskBody.resolution = normalizeArkT2vResolution(resolution, model);
+        taskBody.seed = normalizeArkT2vSeed(seed);
+        taskBody.generate_audio = generateAudio !== false;
+        taskBody.watermark = watermark === true;
+      }
+
+      const createRes = await createVideoGenerationTask(taskBody);
       if (!createRes.ok) {
         const errData = await createRes.json().catch(() => ({}));
         return sendInternalError(res, errData?.error?.message || `创建任务失败 ${createRes.status}`);

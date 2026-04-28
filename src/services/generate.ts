@@ -15,6 +15,8 @@ import type {
   TImageOutputFormat,
   TImageModel,
   TImageResponseFormat,
+  TVideoRatio,
+  TVideoResolution,
   TVideoModel,
 } from "@/typings/generate";
 import { apiBase } from "@/utils/apiBase";
@@ -70,10 +72,15 @@ export interface ITextToImageGenerateParams {
 export interface ITextToVideoGenerateParams {
   model: TVideoModel;
   prompt: string;
-  ratio?: string;
+  ratio?: TVideoRatio;
   duration?: string;
   frameCount?: string;
   inferenceSteps?: string;
+  resolution?: TVideoResolution;
+  seed?: number;
+  generateAudio?: boolean;
+  watermark?: boolean;
+  seedanceAccessKey?: string;
 }
 
 export interface IImageToVideoGenerateParams {
@@ -197,6 +204,8 @@ export const generateTextToImage = async (params: ITextToImageGenerateParams): P
 export const generateTextToVideo = async (params: ITextToVideoGenerateParams): Promise<IVideoGenerateResult> => {
   const modelOption = VIDEO_MODEL_OPTIONS.find((option) => option.value === params.model);
   const isModelScope = params.model === "modelscope";
+  const isSeedance2Fast = params.model === "volc-seedance-2-fast";
+  const isModernSeedance = params.model === "volc-seedance-1-5-pro" || isSeedance2Fast;
   const body = isModelScope
     ? {
         prompt: params.prompt,
@@ -204,9 +213,15 @@ export const generateTextToVideo = async (params: ITextToVideoGenerateParams): P
         num_inference_steps: Number(params.inferenceSteps) || DEFAULT_MODELSCOPE_INFERENCE_STEPS,
       }
     : {
+        model: params.model,
         prompt: params.prompt,
         ratio: params.ratio,
         duration: params.duration,
+        resolution: isModernSeedance ? params.resolution : undefined,
+        seed: isModernSeedance ? params.seed : undefined,
+        generateAudio: isModernSeedance ? params.generateAudio : undefined,
+        watermark: isModernSeedance ? params.watermark : undefined,
+        seedanceAccessKey: isSeedance2Fast ? params.seedanceAccessKey : undefined,
       };
   const data = await postJson(modelOption?.endpoint || "/api/generate/t2v", body);
 

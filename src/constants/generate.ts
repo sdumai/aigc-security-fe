@@ -13,6 +13,8 @@ import type {
   TImageModel,
   TImageResponseFormat,
   TSeedEditSeedMode,
+  TVideoRatio,
+  TVideoResolution,
   TVideoModel,
 } from "@/typings/generate";
 
@@ -30,12 +32,18 @@ export const DEEPFAKE_DEFAULT_MODEL: TDeepfakeModel = FACE_SWAP_MODEL_V36;
 
 export const FACE_ANIMATION_DEFAULT_PROMPT = "让图中人脸做自然的微笑和轻微点头动作";
 export const DEFAULT_IMAGE_MODEL = "volc";
-export const DEFAULT_VIDEO_MODEL = "volc";
+export const DEFAULT_VIDEO_MODEL: TVideoModel = "volc-seedance-1-5-pro";
 export const DEFAULT_IMAGE_SIZE = "2K";
 export const DEFAULT_IMAGE_RESPONSE_FORMAT: TImageResponseFormat = "url";
 export const DEFAULT_IMAGE_OUTPUT_FORMAT: TImageOutputFormat = "jpeg";
 export const DEFAULT_IMAGE_OPTIMIZE_PROMPT = false;
-export const DEFAULT_VIDEO_RATIO = "16:9";
+export const DEFAULT_VIDEO_RATIO: TVideoRatio = "16:9";
+export const DEFAULT_SEEDANCE_2_RATIO: TVideoRatio = "adaptive";
+export const DEFAULT_SEEDANCE_2_RESOLUTION: TVideoResolution = "720p";
+export const DEFAULT_SEEDANCE_2_SEED = -1;
+export const DEFAULT_SEEDANCE_2_GENERATE_AUDIO = true;
+export const DEFAULT_VIDEO_WATERMARK = false;
+export const SEEDANCE_2_ACCESS_KEY = "seedance_pwd";
 export const DEFAULT_T2V_DURATION = "5";
 export const DEFAULT_I2V_DURATION = "5";
 export const DEFAULT_MODELSCOPE_FRAMES = "16";
@@ -72,7 +80,7 @@ export const MIN_SEEDEDIT_SEED = 0;
 export const MAX_SEEDEDIT_SEED = 2147483647;
 export const SHORT_TEXTAREA_ROWS = 2;
 export const MEDIUM_TEXTAREA_ROWS = 3;
-export const DEFAULT_TEXTAREA_ROWS = 4;
+export const DEFAULT_TEXTAREA_ROWS = 3;
 export const FACE_ANIMATION_PROMPT_MAX_LENGTH = 300;
 export const PROMPT_MAX_LENGTH = 500;
 export const TITLE_PROMPT_PREVIEW_START_INDEX = 0;
@@ -94,9 +102,16 @@ export const MODELSCOPE_MAX_FRAMES = 24;
 export const MODELSCOPE_MIN_STEPS = 10;
 export const MODELSCOPE_MAX_STEPS = 50;
 export const MODELSCOPE_DEFAULT_FPS = 8;
-export const STABLE_DIFFUSION_MODEL_HELP_TEXT = `自托管服务由后端代理至 STABLE_DIFFUSION_SERVICE_URL（默认 ${STABLE_DIFFUSION_SERVICE_PORT}）；水印开关仅对火山文生图生效。`;
+export const STABLE_DIFFUSION_MODEL_HELP_TEXT = ``;
 export const TEXT_TO_VIDEO_MODEL_TOOLTIP = `火山返回可播放 URL；ModelScope（${MODELSCOPE_T2V_SERVICE_PORT}）经 Node 代理返回 data:video/mp4;base64`;
+export const SEEDANCE_1_5_MODEL_HELP_TEXT =
+  "Seedance 1.5 pro 使用新版视频生成参数：支持最高 1080p、自适应比例、4-12 秒或智能时长、随机种子、同步音频和水印控制。";
+export const SEEDANCE_2_MODEL_HELP_TEXT =
+  "Seedance 2.0 fast 使用新版视频生成参数：支持自适应比例、4-15 秒或智能时长、随机种子、同步音频和水印控制。";
 export const MODELSCOPE_MODEL_HELP_TEXT = `与文生图里选 Stable Diffusion 类似：由后端转发至 MODELSCOPE_T2V_URL（默认 ${MODELSCOPE_T2V_SERVICE_PORT}）。参数对应 server.py：prompt、num_frames(${MODELSCOPE_MIN_FRAMES}-${MODELSCOPE_MAX_FRAMES})、num_inference_steps(${MODELSCOPE_MIN_STEPS}-${MODELSCOPE_MAX_STEPS})。`;
+export const SEEDANCE_1_5_DURATION_TOOLTIP = "Seedance 1.5 pro 支持 4-12 秒；选择“智能时长”由模型在范围内自动决定。";
+export const SEEDANCE_2_DURATION_TOOLTIP = "Seedance 2.0 fast 支持 4-15 秒；选择“智能时长”由模型在范围内自动决定。";
+export const SEEDANCE_2_SEED_TOOLTIP = "-1 表示随机种子；填入固定整数可提升相同请求下结果的可复现性。";
 export const MODELSCOPE_FRAMES_TOOLTIP = `服务端限制 ${MODELSCOPE_MIN_FRAMES}-${MODELSCOPE_MAX_FRAMES}，导出约 fps=${MODELSCOPE_DEFAULT_FPS}`;
 export const MODELSCOPE_STEPS_TOOLTIP = `${MODELSCOPE_MIN_STEPS}-${MODELSCOPE_MAX_STEPS}，越大越慢、质量可能略好`;
 export const I2V_REFERENCE_TOOLTIP = `按顺序对应提示词中的 [图1][图2]…，最多 ${I2V_MAX_IMAGE_COUNT} 张`;
@@ -189,8 +204,44 @@ export const IMAGE_MODEL_OPTIONS: IModelOption<TImageModel>[] = [
   },
 ];
 
+export const IMAGE_MODEL_INTROS: Array<{
+  model: TImageModel;
+  name: string;
+  badge: string;
+  summary: string;
+  strengths: string[];
+  tradeoff: string;
+}> = [
+  {
+    model: "volc",
+    name: "Seedream 5.0",
+    badge: "最新版本",
+    summary: "面向高质量文生图的方舟图像模型，适合需要更强画面表现、光影质感和提示词理解的样本生成。",
+    strengths: ["视觉质量优先", "支持 2K/3K/4K 档", "JPEG / PNG 输出"],
+    tradeoff: "外部 API 调用，结果链路依赖方舟服务与密钥配置。",
+  },
+  {
+    model: "volc-seedream-4-5",
+    name: "Seedream 4.5",
+    badge: "稳健创作",
+    summary: "整合文生图、图生图与组图能力的图像多模态模型，适合稳定地产出实验与展示素材。",
+    strengths: ["指令遵循强", "编辑一致性好", "2K / 4K 输出"],
+    tradeoff: "能力更均衡，但少了 Seedream 5.0 的新输出格式控制。",
+  },
+  {
+    model: "stable-diffusion",
+    name: "Stable Diffusion",
+    badge: "本地开源",
+    summary: "基于潜空间扩散的开源文生图模型，本项目通过本地 FastAPI 服务接入，适合做可复现实验基线。",
+    strengths: ["本地可控", "开源生态成熟", "不依赖方舟图片接口"],
+    tradeoff: "默认 v1.5 质量与中文理解弱于 Seedream，首次运行需加载模型权重。",
+  },
+];
+
 export const VIDEO_MODEL_OPTIONS: IModelOption<TVideoModel>[] = [
-  { value: "volc", label: "Seedance-1-0-lite-t2v", endpoint: "/api/generate/t2v" },
+  { value: "volc-seedance-1-5-pro", label: "Seedance 1.5 Pro", endpoint: "/api/generate/t2v" },
+  { value: "volc", label: "Seedance 1.0", endpoint: "/api/generate/t2v" },
+  { value: "volc-seedance-2-fast", label: "Seedance 2.0 Fast", endpoint: "/api/generate/t2v" },
   { value: "modelscope", label: "Model Scope", endpoint: "/api/generate/model-scope" },
 ];
 
@@ -220,14 +271,52 @@ export const IMAGE_OUTPUT_FORMAT_OPTIONS: ISelectOption<TImageOutputFormat>[] = 
   { value: "png", label: "PNG" },
 ];
 
-export const VIDEO_RATIO_OPTIONS: ISelectOption[] = [
+export const VIDEO_RATIO_OPTIONS: ISelectOption<TVideoRatio>[] = [
   { value: "16:9", label: "16:9" },
   { value: "1:1", label: "1:1" },
   { value: "9:16", label: "9:16" },
 ];
 
+export const SEEDANCE_2_RATIO_OPTIONS: ISelectOption<TVideoRatio>[] = [
+  { value: "adaptive", label: "自适应" },
+  { value: "16:9", label: "16:9 横屏" },
+  { value: "4:3", label: "4:3 标准" },
+  { value: "1:1", label: "1:1 方形" },
+  { value: "3:4", label: "3:4 竖构图" },
+  { value: "9:16", label: "9:16 竖屏" },
+  { value: "21:9", label: "21:9 宽银幕" },
+];
+
+export const SEEDANCE_2_RESOLUTION_OPTIONS: ISelectOption<TVideoResolution>[] = [
+  { value: "720p", label: "720p 高清" },
+  { value: "480p", label: "480p 快速预览" },
+];
+
+export const SEEDANCE_1_5_RESOLUTION_OPTIONS: ISelectOption<TVideoResolution>[] = [
+  { value: "720p", label: "720p 高清" },
+  { value: "1080p", label: "1080p 高质量" },
+  { value: "480p", label: "480p 快速预览" },
+];
+
 export const T2V_DURATION_OPTIONS: ISelectOption[] = [
   { value: "3", label: "3 秒" },
+  { value: "5", label: "5 秒" },
+  { value: "8", label: "8 秒" },
+  { value: "12", label: "12 秒" },
+];
+
+export const SEEDANCE_2_DURATION_OPTIONS: ISelectOption[] = [
+  { value: "-1", label: "智能时长" },
+  { value: "4", label: "4 秒" },
+  { value: "5", label: "5 秒" },
+  { value: "8", label: "8 秒" },
+  { value: "12", label: "12 秒" },
+  { value: "15", label: "15 秒" },
+];
+
+export const SEEDANCE_1_5_DURATION_OPTIONS: ISelectOption[] = [
+  { value: "-1", label: "智能时长" },
+  { value: "4", label: "4 秒" },
   { value: "5", label: "5 秒" },
   { value: "8", label: "8 秒" },
   { value: "12", label: "12 秒" },

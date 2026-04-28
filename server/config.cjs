@@ -8,6 +8,8 @@ const DEFAULTS = {
   VOLC_ARK_IMAGE_MODEL: "doubao-seedream-5-0-260128",
   VOLC_ARK_IMAGE_MODEL_4_5: "doubao-seedream-4-5-251128",
   VOLC_ARK_T2V_MODEL: "doubao-seedance-1-0-lite-t2v-250428",
+  VOLC_ARK_T2V_MODEL_SEEDANCE_1_5_PRO: "doubao-seedance-1-5-pro-251215",
+  VOLC_ARK_T2V_MODEL_SEEDANCE_2_FAST: "doubao-seedance-2-0-fast-260128",
   UNIVERSAL_FAKE_DETECT_URL: "http://127.0.0.1:8008",
   STABLE_DIFFUSION_SERVICE_URL: "http://127.0.0.1:8009",
   MODELSCOPE_T2V_URL: "http://127.0.0.1:8011",
@@ -63,6 +65,19 @@ const config = {
       ),
     },
     t2vModel: envOrDefault(DEFAULTS.VOLC_ARK_T2V_MODEL, "VOLC_ARK_T2V_MODEL", "VITE_VOLC_ARK_T2V_MODEL"),
+    t2vModels: {
+      "volc-seedance-1-5-pro": envOrDefault(
+        DEFAULTS.VOLC_ARK_T2V_MODEL_SEEDANCE_1_5_PRO,
+        "VOLC_ARK_T2V_MODEL_SEEDANCE_1_5_PRO",
+        "VITE_VOLC_ARK_T2V_MODEL_SEEDANCE_1_5_PRO",
+      ),
+      volc: envOrDefault(DEFAULTS.VOLC_ARK_T2V_MODEL, "VOLC_ARK_T2V_MODEL", "VITE_VOLC_ARK_T2V_MODEL"),
+      "volc-seedance-2-fast": envOrDefault(
+        DEFAULTS.VOLC_ARK_T2V_MODEL_SEEDANCE_2_FAST,
+        "VOLC_ARK_T2V_MODEL_SEEDANCE_2_FAST",
+        "VITE_VOLC_ARK_T2V_MODEL_SEEDANCE_2_FAST",
+      ),
+    },
   },
   localServices: {
     universalFakeDetectUrl: stripTrailingSlash(

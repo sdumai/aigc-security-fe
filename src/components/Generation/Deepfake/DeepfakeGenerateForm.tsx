@@ -58,6 +58,12 @@ import { FaceSwapModelIntroCard } from "@/components/Generation/Deepfake/FaceSwa
 
 const { TextArea } = Input;
 
+const DEEPFAKE_MODEL_OPTION_BADGES: Partial<Record<TDeepfakeModel, string>> = {
+  "Volc FaceSwap 3.6": "新版",
+  "Seedance Lite I2V": "图生视频",
+  "SeedEdit 3.0": "图像编辑",
+};
+
 const DEEPFAKE_FUNCTION_META: Record<TDeepfakeFunction, { icon: ReactNode; description: string }> = {
   faceswap: {
     icon: <SwapOutlined />,
@@ -231,7 +237,12 @@ export const DeepfakeGenerateForm = ({
             <Select disabled={isModelSelectDisabled}>
               {modelOptions.map((model) => (
                 <Select.Option key={model} value={model}>
-                  {model}
+                  <span className="model-select-option">
+                    <span className="model-select-option-label">{model}</span>
+                    {DEEPFAKE_MODEL_OPTION_BADGES[model] && (
+                      <span className="model-select-option-badge">{DEEPFAKE_MODEL_OPTION_BADGES[model]}</span>
+                    )}
+                  </span>
                 </Select.Option>
               ))}
             </Select>

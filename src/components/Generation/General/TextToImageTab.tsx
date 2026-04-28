@@ -24,7 +24,6 @@ import {
 import { DATA_OUTPUT_ROUTE } from "@/constants/routes";
 import {
   COL_FULL_SPAN,
-  COL_HALF_LG_SPAN,
   COMPACT_HELP_TEXT_MARGIN_BOTTOM,
   COMPACT_HELP_TEXT_MARGIN_TOP,
   EMPTY_ICON_SIZE,
@@ -35,6 +34,7 @@ import {
   SAVE_NAVIGATION_DELAY_MS,
 } from "@/constants/ui";
 import { MediaResultCard } from "@/components/Generation/common/MediaResultCard";
+import { ImageModelIntroCard } from "@/components/Generation/General/ImageModelIntroCard";
 import { generateTextToImage } from "@/services/generate";
 import { saveGeneratedContent } from "@/services/content";
 import type { IImageGenerateResult, ITextToImageFormValues } from "@/typings/generate";
@@ -42,6 +42,11 @@ import { downloadMedia } from "@/utils/media";
 
 const { Paragraph } = Typography;
 const { TextArea } = Input;
+
+const IMAGE_MODEL_OPTION_BADGES: Partial<Record<ITextToImageFormValues["imageModel"], string>> = {
+  volc: "最新",
+  "stable-diffusion": "本地",
+};
 
 export const TextToImageTab = () => {
   const navigate = useNavigate();
@@ -131,8 +136,23 @@ export const TextToImageTab = () => {
 
   return (
     <Row gutter={GRID_GUTTER}>
-      <Col xs={COL_FULL_SPAN} lg={COL_HALF_LG_SPAN}>
-        <Card title="文生图参数" bordered={false} className="text-to-image-config-card">
+      <Col xs={COL_FULL_SPAN} lg={14}>
+        <Card
+          title="文生图参数"
+          bordered={false}
+          className="text-to-image-config-card"
+          extra={
+            <Button
+              type="primary"
+              className="deepfake-generate-action"
+              icon={loading ? <FileImageOutlined /> : <ThunderboltOutlined />}
+              loading={loading}
+              onClick={handleGenerate}
+            >
+              {loading ? "生成中..." : "生成图片"}
+            </Button>
+          }
+        >
           <Form
             form={form}
             layout="vertical"
@@ -154,12 +174,18 @@ export const TextToImageTab = () => {
               <Select>
                 {IMAGE_MODEL_OPTIONS.map((option) => (
                   <Select.Option key={option.value} value={option.value}>
-                    {option.label}
+                    <span className="model-select-option">
+                      <span className="model-select-option-label">{option.label}</span>
+                      {IMAGE_MODEL_OPTION_BADGES[option.value] && (
+                        <span className="model-select-option-badge">{IMAGE_MODEL_OPTION_BADGES[option.value]}</span>
+                      )}
+                    </span>
                   </Select.Option>
                 ))}
               </Select>
             </Form.Item>
-            {imageModel === "stable-diffusion" && (
+            <ImageModelIntroCard selectedModel={imageModel} />
+            {imageModel === "stable-diffusion" && STABLE_DIFFUSION_MODEL_HELP_TEXT && (
               <Paragraph type="secondary" style={{ marginTop: COMPACT_HELP_TEXT_MARGIN_TOP, marginBottom: COMPACT_HELP_TEXT_MARGIN_BOTTOM }}>
                 {STABLE_DIFFUSION_MODEL_HELP_TEXT}
               </Paragraph>
@@ -215,23 +241,11 @@ export const TextToImageTab = () => {
                 </Row>
               </div>
             )}
-            <Form.Item>
-              <Button
-                type="primary"
-                size="large"
-                block
-                icon={loading ? <FileImageOutlined /> : <ThunderboltOutlined />}
-                loading={loading}
-                onClick={handleGenerate}
-              >
-                {loading ? "生成中..." : "生成图片"}
-              </Button>
-            </Form.Item>
           </Form>
         </Card>
       </Col>
 
-      <Col xs={COL_FULL_SPAN} lg={COL_HALF_LG_SPAN}>
+      <Col xs={COL_FULL_SPAN} lg={10}>
         <MediaResultCard
           className="text-to-image-result-card"
           title="生成结果"

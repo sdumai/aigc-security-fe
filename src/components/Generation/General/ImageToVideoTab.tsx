@@ -22,7 +22,6 @@ import {
 import { DATA_OUTPUT_ROUTE } from "@/constants/routes";
 import {
   COL_FULL_SPAN,
-  COL_HALF_LG_SPAN,
   EMPTY_ICON_SIZE,
   GRID_GUTTER,
   MESSAGE_DURATION_SECONDS,
@@ -142,8 +141,23 @@ export const ImageToVideoTab = () => {
   return (
     <>
       <Row gutter={GRID_GUTTER}>
-        <Col xs={COL_FULL_SPAN} lg={COL_HALF_LG_SPAN}>
-          <Card title="图生视频参数" bordered={false}>
+        <Col xs={COL_FULL_SPAN} lg={14}>
+          <Card
+            title="图生视频参数"
+            bordered={false}
+            className="text-to-image-config-card"
+            extra={
+              <Button
+                type="primary"
+                className="deepfake-generate-action"
+                icon={<ThunderboltOutlined />}
+                loading={loading}
+                onClick={handleGenerate}
+              >
+                {loading ? "生成中..." : "生成视频"}
+              </Button>
+            }
+          >
             <Form form={form} layout="vertical" initialValues={{ duration: DEFAULT_I2V_DURATION, ratio: DEFAULT_VIDEO_RATIO }}>
               <Form.Item
                 label="提示词（Prompt）"
@@ -185,23 +199,11 @@ export const ImageToVideoTab = () => {
                   ))}
                 </Select>
               </Form.Item>
-              <Form.Item>
-                <Button
-                  type="primary"
-                  size="large"
-                  block
-                  icon={<ThunderboltOutlined />}
-                  loading={loading}
-                  onClick={handleGenerate}
-                >
-                  {loading ? "生成中..." : "生成视频"}
-                </Button>
-              </Form.Item>
             </Form>
           </Card>
         </Col>
 
-        <Col xs={COL_FULL_SPAN} lg={COL_HALF_LG_SPAN}>
+        <Col xs={COL_FULL_SPAN} lg={10}>
           <MediaResultCard
             title="生成结果"
             loading={loading}

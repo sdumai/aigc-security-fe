@@ -28,7 +28,11 @@ export type TImageResponseFormat = "url" | "b64_json";
 
 export type TImageOutputFormat = "jpeg" | "png";
 
-export type TVideoModel = "volc" | "modelscope";
+export type TVideoModel = "volc" | "volc-seedance-1-5-pro" | "volc-seedance-2-fast" | "modelscope";
+
+export type TVideoResolution = "480p" | "720p" | "1080p";
+
+export type TVideoRatio = "adaptive" | "16:9" | "4:3" | "1:1" | "3:4" | "9:16" | "21:9";
 
 export interface ISelectOption<TValue extends string = string> {
   value: TValue;
@@ -99,10 +103,14 @@ export interface ITextToImageFormValues {
 export interface ITextToVideoFormValues {
   videoModel: TVideoModel;
   prompt: string;
-  ratio: string;
+  ratio: TVideoRatio;
   duration: string;
   t2vFrames: string;
   t2vSteps: string;
+  resolution: TVideoResolution;
+  seed: number;
+  generateAudio: boolean;
+  watermark: boolean;
 }
 
 export interface IImageToVideoFormValues {
