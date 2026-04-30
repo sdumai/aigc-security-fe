@@ -22,11 +22,24 @@ import {
   SCROLL_AFTER_RESULT_DELAY_MS,
   TITLE_LEVEL_TWO,
 } from "@/constants/ui";
+import { saveDetectionRecord } from "@/services/content";
 import { detectUnsafeImage, detectUnsafeVideo } from "@/services/detect";
-import type { IDetectMediaBody, IUnsafeDetectionResult, TDetectContentKind, TDetectInputTab } from "@/typings/detect";
+import type { TGeneratedSourceModule } from "@/typings/content";
+import type {
+  IDetectMediaBody,
+  IGeneratedDetectTransfer,
+  IUnsafeDetectionResult,
+  TDetectContentKind,
+  TDetectInputTab,
+} from "@/typings/detect";
 import { assertValidUrl, createImageDetectBody, createRemoteUploadFile, createUnsafeReport } from "@/utils/detect";
-import { getDetectTargetLabel, getGeneratedDetectTransfer, isDataUrl } from "@/utils/detectTransfer";
-import { createUploadFile, dataUrlToFile, downloadTextFile, getBase64FromUploadFile } from "@/utils/media";
+import {
+  createFileFromTransfer,
+  getDetectTargetLabel,
+  getGeneratedDetectTransfer,
+  shouldUseTransferAsFile,
+} from "@/utils/detectTransfer";
+import { createUploadFile, downloadTextFile, getBase64FromUploadFile } from "@/utils/media";
 
 const { Title, Paragraph } = Typography;
 
@@ -47,6 +60,8 @@ const UnsafeDetectPage = () => {
   const [videoUploadFileName, setVideoUploadFileName] = useState("");
   const [videoFps, setVideoFps] = useState(DEFAULT_VIDEO_UNDERSTANDING_FPS);
   const [videoInputTab, setVideoInputTab] = useState<TDetectInputTab>("upload");
+  const [activeSampleId, setActiveSampleId] = useState<string | undefined>();
+  const [activeTransfer, setActiveTransfer] = useState<IGeneratedDetectTransfer | null>(null);
 
   useEffect(() => {
     const transfer = getGeneratedDetectTransfer(location.state, "unsafe");
@@ -61,52 +76,109 @@ const UnsafeDetectPage = () => {
     }
     handledTransferKeyRef.current = transferKey;
 
-    setLoading(false);
-    setResult(null);
-    setContentKind(transfer.mediaType);
-    setCurrentStep(DETECT_STEP_READY);
+    let cancelled = false;
 
-    if (transfer.mediaType === "image") {
-      setVideoUrlInput("");
-      setVideoPreviewUrl("");
-      setVideoUploadFileName("");
-      setVideoFile(null);
+    const applyTransfer = async () => {
+      try {
+        setLoading(false);
+        setResult(null);
+        setContentKind(transfer.mediaType);
+        setCurrentStep(DETECT_STEP_READY);
+        setActiveSampleId(transfer.sampleId);
+        setActiveTransfer(transfer);
 
-      if (isDataUrl(transfer.url)) {
-        const file = dataUrlToFile(transfer.url, transfer.filename);
-        setActiveTab("upload");
-        setUrlInput("");
-        setUploadedFile(createUploadFile(file, transfer.url));
-        setPreviewUrl(transfer.url);
-      } else {
-        setActiveTab("url");
-        setUrlInput(transfer.url);
-        setUploadedFile(createRemoteUploadFile(transfer.url));
-        setPreviewUrl(transfer.url);
+        if (transfer.mediaType === "image") {
+          setVideoUrlInput("");
+          setVideoPreviewUrl("");
+          setVideoUploadFileName("");
+          setVideoFile(null);
+
+          if (shouldUseTransferAsFile(transfer)) {
+            const file = await createFileFromTransfer(transfer);
+            if (cancelled) return;
+            setActiveTab("upload");
+            setUrlInput("");
+            setUploadedFile(createUploadFile(file, transfer.url));
+            setPreviewUrl(transfer.url);
+          } else {
+            setActiveTab("url");
+            setUrlInput(transfer.url);
+            setUploadedFile(createRemoteUploadFile(transfer.url));
+            setPreviewUrl(transfer.url);
+          }
+        } else {
+          setUploadedFile(null);
+          setPreviewUrl("");
+          setUrlInput("");
+
+          if (shouldUseTransferAsFile(transfer)) {
+            const file = await createFileFromTransfer(transfer);
+            if (cancelled) return;
+            setVideoInputTab("upload");
+            setVideoFile(file);
+            setVideoUrlInput("");
+            setVideoPreviewUrl(transfer.url);
+            setVideoUploadFileName(transfer.filename);
+          } else {
+            setVideoInputTab("url");
+            setVideoFile(null);
+            setVideoUrlInput(transfer.url);
+            setVideoPreviewUrl(transfer.url);
+            setVideoUploadFileName(transfer.filename);
+          }
+        }
+
+        message.success(`已送入${getDetectTargetLabel("unsafe")}，可直接开始检测`);
+      } catch (error) {
+        console.error("Apply generated transfer error:", error);
+        message.error(error instanceof Error ? error.message : "读取送检样本失败");
       }
-    } else {
-      setUploadedFile(null);
-      setPreviewUrl("");
-      setUrlInput("");
+    };
 
-      if (isDataUrl(transfer.url)) {
-        const file = dataUrlToFile(transfer.url, transfer.filename);
-        setVideoInputTab("upload");
-        setVideoFile(file);
-        setVideoUrlInput("");
-        setVideoPreviewUrl(transfer.url);
-        setVideoUploadFileName(transfer.filename);
-      } else {
-        setVideoInputTab("url");
-        setVideoFile(null);
-        setVideoUrlInput(transfer.url);
-        setVideoPreviewUrl(transfer.url);
-        setVideoUploadFileName(transfer.filename);
-      }
+    void applyTransfer();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [location.state]);
+
+  const getCurrentFilename = () => {
+    if (contentKind === "video") {
+      return videoUploadFileName || videoFile?.name || videoUrlInput.split("/").pop() || "视频样本";
     }
 
-    message.success(`已送入${getDetectTargetLabel("unsafe")}，可直接开始检测`);
-  }, [location.state]);
+    return uploadedFile?.name || urlInput.split("/").pop() || "图片样本";
+  };
+
+  const getDetectionModelName = () =>
+    contentKind === "video" ? "Seed 2.0 Pro（视频敏感内容检测）" : "Seed 2.0 Pro（图片敏感内容检测）";
+
+  const persistUnsafeDetectionRecord = async (nextResult: IUnsafeDetectionResult) => {
+    try {
+      await saveDetectionRecord({
+        sampleId: activeSampleId,
+        type: "unsafe",
+        mediaType: contentKind,
+        filename: getCurrentFilename(),
+        result: RISK_CONFIG[nextResult.risk].text,
+        riskScore: nextResult.riskScore,
+        model: getDetectionModelName(),
+        detectorModel: getDetectionModelName(),
+        sourceModule: activeTransfer?.sourceModule as TGeneratedSourceModule | undefined,
+        sourceTitle: activeTransfer?.title,
+        sourceModel: activeTransfer?.model,
+        sourcePrompt: activeTransfer?.title,
+        sourceUrl: activeTransfer?.url,
+        sourceThumbnailUrl: activeTransfer?.url,
+        previewUrl: contentKind === "video" ? videoPreviewUrl || videoUrlInput : previewUrl,
+        labels: nextResult.violations,
+        rawResult: nextResult,
+      });
+    } catch (error) {
+      console.error("Save unsafe detection record error:", error);
+      message.warning("检测已完成，但历史记录保存失败");
+    }
+  };
 
   const scrollToResult = () => {
     setTimeout(() => window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" }), SCROLL_AFTER_RESULT_DELAY_MS);
@@ -122,12 +194,16 @@ const UnsafeDetectPage = () => {
       setVideoUploadFileName("");
       setVideoFile(null);
       setVideoFps(DEFAULT_VIDEO_UNDERSTANDING_FPS);
+      setActiveSampleId(undefined);
+      setActiveTransfer(null);
       return;
     }
 
     setUploadedFile(null);
     setPreviewUrl("");
     setUrlInput("");
+    setActiveSampleId(undefined);
+    setActiveTransfer(null);
   };
 
   const handleImageUpload: UploadProps["customRequest"] = async ({ file }) => {
@@ -144,6 +220,8 @@ const UnsafeDetectPage = () => {
       status: "done",
       originFileObj: uploadFile as UploadFile["originFileObj"],
     });
+    setActiveSampleId(undefined);
+    setActiveTransfer(null);
     setPreviewUrl(URL.createObjectURL(uploadFile));
     setCurrentStep(DETECT_STEP_READY);
     message.success("文件上传成功，请选择检测方法");
@@ -161,6 +239,8 @@ const UnsafeDetectPage = () => {
       assertValidUrl(nextUrl, "URL格式不正确，请输入有效的URL");
       setPreviewUrl(nextUrl);
       setUploadedFile(createRemoteUploadFile(nextUrl));
+      setActiveSampleId(undefined);
+      setActiveTransfer(null);
       setCurrentStep(DETECT_STEP_READY);
       message.success("URL加载成功，请选择检测方法");
     } catch (error) {
@@ -173,6 +253,8 @@ const UnsafeDetectPage = () => {
     setVideoPreviewUrl(URL.createObjectURL(file));
     setVideoUploadFileName(file.name || "视频");
     setVideoUrlInput("");
+    setActiveSampleId(undefined);
+    setActiveTransfer(null);
     setCurrentStep(DETECT_STEP_READY);
     message.success("视频已选择，将使用 Base64 直接检测");
   };
@@ -190,6 +272,8 @@ const UnsafeDetectPage = () => {
       setVideoFile(null);
       setVideoPreviewUrl(nextUrl);
       setVideoUploadFileName(nextUrl.split("/").pop() || "视频");
+      setActiveSampleId(undefined);
+      setActiveTransfer(null);
       setCurrentStep(DETECT_STEP_READY);
       message.success("已加载视频地址，可开始检测");
     } catch (error) {
@@ -211,7 +295,9 @@ const UnsafeDetectPage = () => {
     try {
       setLoading(true);
       setResult(null);
-      setResult(await detectUnsafeImage(await createImageDetectBody(activeTab, uploadedFile, urlInput)));
+      const nextResult = await detectUnsafeImage(await createImageDetectBody(activeTab, uploadedFile, urlInput));
+      setResult(nextResult);
+      await persistUnsafeDetectionRecord(nextResult);
       setCurrentStep(DETECT_STEP_RESULT);
       message.success("安全检测完成");
       scrollToResult();
@@ -249,7 +335,9 @@ const UnsafeDetectPage = () => {
         setVideoPreviewUrl(nextUrl);
       }
 
-      setResult(await detectUnsafeVideo(body));
+      const nextResult = await detectUnsafeVideo(body);
+      setResult(nextResult);
+      await persistUnsafeDetectionRecord(nextResult);
       setCurrentStep(DETECT_STEP_RESULT);
       message.success("视频敏感检测完成");
       scrollToResult();
@@ -300,6 +388,8 @@ const UnsafeDetectPage = () => {
         onChange={(key) => {
           setContentKind(key as TDetectContentKind);
           setResult(null);
+          setActiveSampleId(undefined);
+          setActiveTransfer(null);
           setCurrentStep(DETECT_STEP_INPUT);
         }}
         size="large"
@@ -326,7 +416,11 @@ const UnsafeDetectPage = () => {
                     urlInput={urlInput}
                     uploadHint="支持图片（JPG、PNG 等）"
                     uploadProps={uploadProps}
-                    onActiveTabChange={setActiveTab}
+                    onActiveTabChange={(tab) => {
+                      setActiveTab(tab);
+                      setActiveSampleId(undefined);
+                      setActiveTransfer(null);
+                    }}
                     onUrlInputChange={setUrlInput}
                     onUrlLoad={handleUrlLoad}
                     onDetect={handleDetect}
@@ -370,6 +464,8 @@ const UnsafeDetectPage = () => {
                     detectButtonDisabled={!videoPreviewUrl && !videoFile && !videoUrlInput.trim()}
                     onInputTabChange={(tab) => {
                       setVideoInputTab(tab);
+                      setActiveSampleId(undefined);
+                      setActiveTransfer(null);
                       if (tab === "url") {
                         setVideoFile(null);
                         setVideoUploadFileName("");
@@ -377,7 +473,11 @@ const UnsafeDetectPage = () => {
                       }
                     }}
                     onVideoFileChange={handleVideoFileChange}
-                    onVideoUrlInputChange={setVideoUrlInput}
+                    onVideoUrlInputChange={(value) => {
+                      setVideoUrlInput(value);
+                      setActiveSampleId(undefined);
+                      setActiveTransfer(null);
+                    }}
                     onFpsChange={setVideoFps}
                     onVideoUrlLoad={handleVideoUrlLoad}
                     onDetect={handleDetect}

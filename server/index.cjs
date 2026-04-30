@@ -9,6 +9,7 @@
 const express = require("express");
 const cors = require("cors");
 const { config, hasArkApiKey, hasArkVisionConfig, hasVolcCredentials } = require("./config.cjs");
+const { registerContentRoutes } = require("./routes/contentRoutes.cjs");
 const { registerDetectRoutes } = require("./routes/detectRoutes.cjs");
 const { registerGenerateRoutes } = require("./routes/generateRoutes.cjs");
 
@@ -19,6 +20,7 @@ app.use(express.json({ limit: config.server.jsonLimit }));
 
 registerDetectRoutes(app);
 registerGenerateRoutes(app);
+registerContentRoutes(app);
 
 function logAvailableRoutes(port) {
   console.log(
@@ -47,8 +49,15 @@ function logAvailableRoutes(port) {
     console.log(`文生视频(ModelScope→${config.localServices.modelScopeT2vUrl}): http://localhost:${port}/api/generate/model-scope`);
     console.log(`图生视频: http://localhost:${port}/api/generate/i2v`);
   }
+
+  console.log(`内容样本库: http://localhost:${port}/api/data/outputs`);
+  console.log(`检测记录库: http://localhost:${port}/api/data/detections`);
 }
 
-app.listen(config.server.port, () => {
+const server = app.listen(config.server.port, () => {
   logAvailableRoutes(config.server.port);
+});
+
+server.on("error", (error) => {
+  console.error("代理服务启动失败:", error);
 });

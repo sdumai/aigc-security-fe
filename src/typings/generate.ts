@@ -70,7 +70,9 @@ export interface ISaveGeneratedContentPayload {
   type: TContentType;
   title: string;
   url: string;
+  sourceModule?: "text-to-image" | "text-to-video" | "image-to-video" | "deepfake" | "manual";
   model?: string;
+  prompt?: string;
 }
 
 export interface IDeepfakeFormValues {

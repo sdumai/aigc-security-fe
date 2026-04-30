@@ -72,6 +72,7 @@ import { sendGeneratedResultToDetect } from "@/utils/detectTransfer";
 import type { ITextToVideoFormValues, IVideoGenerateResult } from "@/typings/generate";
 import type { TGeneratedDetectTarget } from "@/typings/detect";
 import { dataUrlToBlob, downloadMedia } from "@/utils/media";
+import { getGenerationModelLabel } from "@/utils/modelLabels";
 
 const { Paragraph } = Typography;
 const { TextArea } = Input;
@@ -88,6 +89,7 @@ export const TextToVideoTab = () => {
   const videoModel = Form.useWatch("videoModel", form);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<IVideoGenerateResult | null>(null);
+  const [savedSampleId, setSavedSampleId] = useState<string | undefined>();
   const [previewSrc, setPreviewSrc] = useState<string | null>(null);
   const [seedance2Authorized, setSeedance2Authorized] = useState(false);
   const [seedance2AccessKey, setSeedance2AccessKey] = useState("");
@@ -157,6 +159,7 @@ export const TextToVideoTab = () => {
       const values = await form.validateFields();
       setLoading(true);
       setResult(null);
+      setSavedSampleId(undefined);
       setResult(
         await generateTextToVideo({
           model: values.videoModel,
@@ -226,11 +229,16 @@ export const TextToVideoTab = () => {
 
     try {
       const values = form.getFieldsValue();
-      await saveGeneratedContent({
+      const modelLabel = getGenerationModelLabel(values.videoModel);
+      const sample = await saveGeneratedContent({
         type: "video",
         title: `AI 视频生成 - ${(values.prompt || "").substring(TITLE_PROMPT_PREVIEW_START_INDEX, TITLE_PROMPT_PREVIEW_LENGTH)}...`,
         url: result.videoUrl,
+        sourceModule: "text-to-video",
+        model: modelLabel,
+        prompt: values.prompt,
       });
+      setSavedSampleId(sample.id);
       message.success({ content: "视频已保存！可在内容管理中查看", duration: MESSAGE_DURATION_SECONDS });
       setTimeout(() => navigate(DATA_OUTPUT_ROUTE), SAVE_NAVIGATION_DELAY_MS);
     } catch (error) {
@@ -238,14 +246,43 @@ export const TextToVideoTab = () => {
     }
   };
 
-  const handleSendToDetect = (target: TGeneratedDetectTarget) => {
+  const handleSendToDetect = async (target: TGeneratedDetectTarget) => {
+    if (!result?.videoUrl) {
+      message.warning("暂无可送检的生成视频");
+      return;
+    }
+
     const values = form.getFieldsValue();
+    const modelLabel = getGenerationModelLabel(values.videoModel);
+    let sampleId = savedSampleId;
+
+    try {
+      if (!sampleId) {
+        const sample = await saveGeneratedContent({
+          type: "video",
+          title: `AI 视频生成 - ${(values.prompt || "").substring(TITLE_PROMPT_PREVIEW_START_INDEX, TITLE_PROMPT_PREVIEW_LENGTH)}...`,
+          url: result.videoUrl,
+          sourceModule: "text-to-video",
+          model: modelLabel,
+          prompt: values.prompt,
+        });
+        sampleId = sample.id;
+        setSavedSampleId(sample.id);
+      }
+    } catch (error) {
+      console.error("Save sample before detect error:", error);
+      message.warning("样本记录保存失败，仍继续送检");
+    }
+
     const sent = sendGeneratedResultToDetect({
       navigate,
       result,
       mediaType: "video",
       target,
       title: values.prompt,
+      model: modelLabel,
+      sourceModule: "text-to-video",
+      sampleId,
     });
 
     if (!sent) {
@@ -461,7 +498,10 @@ export const TextToVideoTab = () => {
           onSendToDetect={handleSendToDetect}
           onDownload={handleDownload}
           onSave={handleSave}
-          onReset={() => setResult(null)}
+          onReset={() => {
+            setResult(null);
+            setSavedSampleId(undefined);
+          }}
         />
       </Col>
       <Modal

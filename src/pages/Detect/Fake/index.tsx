@@ -27,11 +27,25 @@ import {
   SMALL_SPACE_SIZE,
   TITLE_LEVEL_TWO,
 } from "@/constants/ui";
+import { saveDetectionRecord } from "@/services/content";
 import { detectFakeImage, detectFakeVideo } from "@/services/detect";
-import type { IDetectMediaBody, IFakeDetectionResult, TDetectContentKind, TDetectInputTab, TImageDetectBackend } from "@/typings/detect";
+import type { TGeneratedSourceModule } from "@/typings/content";
+import type {
+  IDetectMediaBody,
+  IFakeDetectionResult,
+  IGeneratedDetectTransfer,
+  TDetectContentKind,
+  TDetectInputTab,
+  TImageDetectBackend,
+} from "@/typings/detect";
 import { assertValidUrl, createImageDetectBody, createRemoteUploadFile } from "@/utils/detect";
-import { getDetectTargetLabel, getGeneratedDetectTransfer, isDataUrl } from "@/utils/detectTransfer";
-import { createUploadFile, dataUrlToFile, getBase64FromUploadFile } from "@/utils/media";
+import {
+  createFileFromTransfer,
+  getDetectTargetLabel,
+  getGeneratedDetectTransfer,
+  shouldUseTransferAsFile,
+} from "@/utils/detectTransfer";
+import { createUploadFile, getBase64FromUploadFile } from "@/utils/media";
 
 const { Title, Paragraph } = Typography;
 
@@ -53,6 +67,8 @@ const FakeDetectPage = () => {
   const [videoInputTab, setVideoInputTab] = useState<TDetectInputTab>("upload");
   const [imageDetectBackend, setImageDetectBackend] = useState<TImageDetectBackend>(DEFAULT_IMAGE_DETECT_BACKEND);
   const [currentStep, setCurrentStep] = useState(DETECT_STEP_INPUT);
+  const [activeSampleId, setActiveSampleId] = useState<string | undefined>();
+  const [activeTransfer, setActiveTransfer] = useState<IGeneratedDetectTransfer | null>(null);
 
   useEffect(() => {
     const transfer = getGeneratedDetectTransfer(location.state, "fake");
@@ -67,52 +83,114 @@ const FakeDetectPage = () => {
     }
     handledTransferKeyRef.current = transferKey;
 
-    setLoading(false);
-    setResult(null);
-    setDetectType(transfer.mediaType);
-    setCurrentStep(DETECT_STEP_READY);
+    let cancelled = false;
 
-    if (transfer.mediaType === "image") {
-      setVideoUrl("");
-      setVideoPreviewUrl("");
-      setVideoFile(null);
-      setVideoUploadFileName("");
+    const applyTransfer = async () => {
+      try {
+        setLoading(false);
+        setResult(null);
+        setDetectType(transfer.mediaType);
+        setCurrentStep(DETECT_STEP_READY);
+        setActiveSampleId(transfer.sampleId);
+        setActiveTransfer(transfer);
 
-      if (isDataUrl(transfer.url)) {
-        const file = dataUrlToFile(transfer.url, transfer.filename);
-        setActiveTab("upload");
-        setUrlInput("");
-        setUploadedFile(createUploadFile(file, transfer.url));
-        setPreviewUrl(transfer.url);
-      } else {
-        setActiveTab("url");
-        setUrlInput(transfer.url);
-        setUploadedFile(createRemoteUploadFile(transfer.url));
-        setPreviewUrl(transfer.url);
+        if (transfer.mediaType === "image") {
+          setVideoUrl("");
+          setVideoPreviewUrl("");
+          setVideoFile(null);
+          setVideoUploadFileName("");
+
+          if (shouldUseTransferAsFile(transfer)) {
+            const file = await createFileFromTransfer(transfer);
+            if (cancelled) return;
+            setActiveTab("upload");
+            setUrlInput("");
+            setUploadedFile(createUploadFile(file, transfer.url));
+            setPreviewUrl(transfer.url);
+          } else {
+            setActiveTab("url");
+            setUrlInput(transfer.url);
+            setUploadedFile(createRemoteUploadFile(transfer.url));
+            setPreviewUrl(transfer.url);
+          }
+        } else {
+          setUploadedFile(null);
+          setPreviewUrl("");
+          setUrlInput("");
+
+          if (shouldUseTransferAsFile(transfer)) {
+            const file = await createFileFromTransfer(transfer);
+            if (cancelled) return;
+            setVideoInputTab("upload");
+            setVideoFile(file);
+            setVideoUrl("");
+            setVideoPreviewUrl(transfer.url);
+            setVideoUploadFileName(transfer.filename);
+          } else {
+            setVideoInputTab("url");
+            setVideoFile(null);
+            setVideoUrl(transfer.url);
+            setVideoPreviewUrl(transfer.url);
+            setVideoUploadFileName(transfer.filename);
+          }
+        }
+
+        message.success(`已送入${getDetectTargetLabel("fake")}，可直接开始检测`);
+      } catch (error) {
+        console.error("Apply generated transfer error:", error);
+        message.error(error instanceof Error ? error.message : "读取送检样本失败");
       }
-    } else {
-      setUploadedFile(null);
-      setPreviewUrl("");
-      setUrlInput("");
+    };
 
-      if (isDataUrl(transfer.url)) {
-        const file = dataUrlToFile(transfer.url, transfer.filename);
-        setVideoInputTab("upload");
-        setVideoFile(file);
-        setVideoUrl("");
-        setVideoPreviewUrl(transfer.url);
-        setVideoUploadFileName(transfer.filename);
-      } else {
-        setVideoInputTab("url");
-        setVideoFile(null);
-        setVideoUrl(transfer.url);
-        setVideoPreviewUrl(transfer.url);
-        setVideoUploadFileName(transfer.filename);
-      }
+    void applyTransfer();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [location.state]);
+
+  const getCurrentFilename = () => {
+    if (detectType === "video") {
+      return videoUploadFileName || videoFile?.name || videoUrl.split("/").pop() || "视频样本";
     }
 
-    message.success(`已送入${getDetectTargetLabel("fake")}，可直接开始检测`);
-  }, [location.state]);
+    return uploadedFile?.name || urlInput.split("/").pop() || "图片样本";
+  };
+
+  const getDetectionModelName = () => {
+    if (detectType === "video") {
+      return "Seed 2.0 Pro（视频 AI 生成检测）";
+    }
+
+    return IMAGE_DETECT_BACKENDS.find((backend) => backend.value === imageDetectBackend)?.label?.toString() || "Seed 2.0 Pro";
+  };
+
+  const persistFakeDetectionRecord = async (nextResult: IFakeDetectionResult) => {
+    try {
+      await saveDetectionRecord({
+        sampleId: activeSampleId,
+        type: "fake",
+        mediaType: detectType,
+        filename: getCurrentFilename(),
+        result: nextResult.isFake ? "疑似 AI 生成/伪造" : "通过",
+        confidence: nextResult.confidence,
+        model: getDetectionModelName(),
+        detectorModel: getDetectionModelName(),
+        sourceModule: activeTransfer?.sourceModule as TGeneratedSourceModule | undefined,
+        sourceTitle: activeTransfer?.title,
+        sourceModel: activeTransfer?.model,
+        sourcePrompt: activeTransfer?.title,
+        sourceUrl: activeTransfer?.url,
+        sourceThumbnailUrl: activeTransfer?.url,
+        previewUrl: detectType === "video" ? videoPreviewUrl || videoUrl : previewUrl,
+        labels: nextResult.details.artifacts,
+        rawResult: nextResult,
+      });
+    } catch (error) {
+      console.error("Save fake detection record error:", error);
+      message.warning("检测已完成，但历史记录保存失败");
+    }
+  };
 
   const scrollToResult = () => {
     setTimeout(() => window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" }), SCROLL_AFTER_RESULT_DELAY_MS);
@@ -132,6 +210,8 @@ const FakeDetectPage = () => {
       status: "done",
       originFileObj: uploadFile as UploadFile["originFileObj"],
     });
+    setActiveSampleId(undefined);
+    setActiveTransfer(null);
     setPreviewUrl(URL.createObjectURL(uploadFile));
     setCurrentStep(DETECT_STEP_READY);
     message.success("文件上传成功，请选择检测方法");
@@ -149,6 +229,8 @@ const FakeDetectPage = () => {
       assertValidUrl(nextUrl, "URL格式不正确，请输入有效的URL");
       setPreviewUrl(nextUrl);
       setUploadedFile(createRemoteUploadFile(nextUrl));
+      setActiveSampleId(undefined);
+      setActiveTransfer(null);
       setCurrentStep(DETECT_STEP_READY);
       message.success("URL加载成功，请选择检测方法");
     } catch (error) {
@@ -166,7 +248,9 @@ const FakeDetectPage = () => {
       setLoading(true);
       setResult(null);
       const body = await createImageDetectBody(activeTab, uploadedFile, urlInput);
-      setResult(await detectFakeImage({ body, backend: imageDetectBackend, previewUrl }));
+      const nextResult = await detectFakeImage({ body, backend: imageDetectBackend, previewUrl });
+      setResult(nextResult);
+      await persistFakeDetectionRecord(nextResult);
       setCurrentStep(DETECT_STEP_RESULT);
       message.success("AI 图片生成检测完成");
       scrollToResult();
@@ -187,6 +271,8 @@ const FakeDetectPage = () => {
     setVideoPreviewUrl(URL.createObjectURL(file));
     setVideoUploadFileName(file.name || "视频文件");
     setVideoUrl("");
+    setActiveSampleId(undefined);
+    setActiveTransfer(null);
     setCurrentStep(DETECT_STEP_READY);
     message.success("已选择视频，可点击开始检测");
   };
@@ -223,7 +309,9 @@ const FakeDetectPage = () => {
         setVideoPreviewUrl(inputUrl);
       }
 
-      setResult(await detectFakeVideo({ body, previewUrl: preview }));
+      const nextResult = await detectFakeVideo({ body, previewUrl: preview });
+      setResult(nextResult);
+      await persistFakeDetectionRecord(nextResult);
       setCurrentStep(DETECT_STEP_RESULT);
       message.success("视频检测完成");
       scrollToResult();
@@ -249,6 +337,8 @@ const FakeDetectPage = () => {
     setVideoFile(null);
     setVideoFps(DEFAULT_VIDEO_UNDERSTANDING_FPS);
     setVideoUploadFileName("");
+    setActiveSampleId(undefined);
+    setActiveTransfer(null);
     setCurrentStep(DETECT_STEP_INPUT);
     setImageDetectBackend(DEFAULT_IMAGE_DETECT_BACKEND);
   };
@@ -280,6 +370,8 @@ const FakeDetectPage = () => {
         onChange={(key) => {
           setDetectType(key as TDetectContentKind);
           setResult(null);
+          setActiveSampleId(undefined);
+          setActiveTransfer(null);
           setCurrentStep(DETECT_STEP_INPUT);
         }}
         items={[
@@ -305,7 +397,11 @@ const FakeDetectPage = () => {
                     uploadHint="仅支持图片格式（JPG、PNG）"
                     uploadProps={uploadProps}
                     faceRegion={result?.details.faceRegion}
-                    onActiveTabChange={setActiveTab}
+                    onActiveTabChange={(tab) => {
+                      setActiveTab(tab);
+                      setActiveSampleId(undefined);
+                      setActiveTransfer(null);
+                    }}
                     onUrlInputChange={setUrlInput}
                     onUrlLoad={handleUrlLoad}
                     onDetect={handleImageDetect}
@@ -364,6 +460,8 @@ const FakeDetectPage = () => {
                     detectButtonDisabled={!videoFile && !videoUrl.trim()}
                     onInputTabChange={(tab) => {
                       setVideoInputTab(tab);
+                      setActiveSampleId(undefined);
+                      setActiveTransfer(null);
                       if (tab === "url") {
                         setVideoFile(null);
                         setVideoUploadFileName("");
@@ -373,6 +471,8 @@ const FakeDetectPage = () => {
                     onVideoUrlInputChange={(value) => {
                       setVideoUrl(value);
                       setVideoPreviewUrl("");
+                      setActiveSampleId(undefined);
+                      setActiveTransfer(null);
                     }}
                     onFpsChange={setVideoFps}
                     onDetect={handleVideoDetect}

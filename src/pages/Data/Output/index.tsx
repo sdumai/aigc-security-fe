@@ -1,416 +1,781 @@
-import { useState, useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  Card,
-  Row,
-  Col,
-  Image,
   Button,
-  Space,
-  Tag,
-  Modal,
-  Form,
-  Select,
-  Switch,
-  message,
-  Spin,
-  Typography,
-  Tabs,
+  Card,
+  Col,
+  Descriptions,
+  Drawer,
   Empty,
+  Image,
+  message,
+  Modal,
+  Row,
+  Space,
+  Statistic,
+  Table,
+  Tabs,
+  Tag,
+  Tooltip,
+  Typography,
 } from "antd";
 import {
+  DeleteOutlined,
   DownloadOutlined,
   EyeOutlined,
-  ShareAltOutlined,
-  PictureOutlined,
-  VideoCameraOutlined,
   FileImageOutlined,
-  ClockCircleOutlined,
-  HomeOutlined,
-  ThunderboltOutlined,
+  ReloadOutlined,
+  SafetyOutlined,
   ScanOutlined,
-  ToolOutlined,
+  VideoCameraOutlined,
 } from "@ant-design/icons";
-import request from "@/utils/request";
+import type { ColumnsType } from "antd/es/table";
 
-const { Title, Paragraph, Text } = Typography;
+import { deleteGeneratedSample, fetchDetectionRecords, fetchGeneratedSamples } from "@/services/content";
+import type { IContentDetectionRecord, IContentSample, TGeneratedSourceModule } from "@/typings/content";
+import type { TGeneratedDetectTarget } from "@/typings/detect";
+import { sendContentSampleToDetect } from "@/utils/detectTransfer";
+import { downloadMedia } from "@/utils/media";
+import { getGenerationModelLabel } from "@/utils/modelLabels";
 
-/** 内容与记录管理模块是否开放（设为 true 可恢复完整功能） */
-const MODULE_AVAILABLE = false;
+const { Paragraph, Text, Title } = Typography;
 
-interface OutputItem {
-  id: string;
-  type: "image" | "video";
-  title: string;
-  thumbnailUrl: string;
-  fullUrl: string;
-  createdAt: string;
-  size: string;
-}
+const SOURCE_MODULE_LABELS: Record<TGeneratedSourceModule, string> = {
+  "text-to-image": "文生图",
+  "text-to-video": "文生视频",
+  "image-to-video": "图生视频",
+  deepfake: "Deepfake",
+  manual: "手动样本",
+};
 
-interface DetectionRecord {
-  id: string;
-  type: "fake" | "unsafe";
-  filename: string;
-  result: string;
-  confidence?: number;
-  riskScore?: number;
-  createdAt: string;
-}
+const DETECTION_TYPE_LABELS: Record<TGeneratedDetectTarget, string> = {
+  fake: "AI 生成检测",
+  unsafe: "敏感检测",
+};
+
+const formatDateTime = (value: string) => {
+  if (!value) return "-";
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+
+  return date.toLocaleString("zh-CN", { hour12: false });
+};
+
+const normalizePercentValue = (value?: number) => {
+  if (typeof value !== "number" || !Number.isFinite(value)) return undefined;
+  return value <= 1 ? value * 100 : value;
+};
+
+const formatScore = (record: IContentDetectionRecord) => {
+  const confidence = normalizePercentValue(record.confidence);
+  if (typeof confidence === "number") {
+    return `${Math.round(confidence)}%`;
+  }
+
+  const riskScore = normalizePercentValue(record.riskScore);
+  if (typeof riskScore === "number") {
+    return `${Math.round(riskScore)}/100`;
+  }
+
+  return "-";
+};
+
+const getRecordNumericScore = (record: IContentDetectionRecord) => {
+  if (record.type === "fake") {
+    return normalizePercentValue(record.confidence);
+  }
+
+  return normalizePercentValue(record.riskScore);
+};
+
+const isHighRiskRecord = (record: IContentDetectionRecord) => {
+  const score = getRecordNumericScore(record) || 0;
+
+  if (record.type === "fake") {
+    return !record.result.includes("通过") && score >= 90;
+  }
+
+  return record.result.includes("高") || score >= 80;
+};
+
+const getRecordTagColor = (record: IContentDetectionRecord) => {
+  if (record.type === "fake") {
+    return record.result.includes("通过") ? "success" : "error";
+  }
+
+  if (record.result.includes("高")) return "error";
+  if (record.result.includes("中")) return "warning";
+  return "success";
+};
+
+const buildDownloadFilename = (sample: IContentSample) => {
+  if (sample.mediaFilename) return sample.mediaFilename;
+  const extension = sample.type === "video" ? "mp4" : "jpg";
+  return `${sample.title || "generated-sample"}.${extension}`;
+};
+
+const inferRecordDetectorModelName = (record: IContentDetectionRecord) => {
+  const detectorModel = record.detectorModel || record.model;
+
+  if (detectorModel && detectorModel.trim()) {
+    if (detectorModel === "火山引擎") {
+      return record.mediaType === "video" ? "Seed 2.0 Pro（视频 AI 生成检测）" : "Seed 2.0 Pro";
+    }
+
+    if (detectorModel === "视频 AI 生成识别") {
+      return "Seed 2.0 Pro（视频 AI 生成检测）";
+    }
+
+    if (detectorModel.includes("火山方舟视觉模型") || detectorModel.includes("火山方舟视频理解模型")) {
+      if (record.type === "unsafe") {
+        return record.mediaType === "video" ? "Seed 2.0 Pro（视频敏感内容检测）" : "Seed 2.0 Pro（图片敏感内容检测）";
+      }
+
+      return record.mediaType === "video" ? "Seed 2.0 Pro（视频 AI 生成检测）" : "Seed 2.0 Pro";
+    }
+
+    return detectorModel;
+  }
+
+  if (record.type === "unsafe") {
+    return record.mediaType === "video" ? "Seed 2.0 Pro（视频敏感内容检测）" : "Seed 2.0 Pro（图片敏感内容检测）";
+  }
+
+  return record.mediaType === "video" ? "Seed 2.0 Pro（视频 AI 生成检测）" : "Seed 2.0 Pro";
+};
 
 const DataOutputPage = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
-  const [outputs, setOutputs] = useState<OutputItem[]>([]);
-  const [detections, setDetections] = useState<DetectionRecord[]>([]);
-  const [downloadModalVisible, setDownloadModalVisible] = useState(false);
-  const [selectedItem, setSelectedItem] = useState<OutputItem | null>(null);
-  const [previewModalVisible, setPreviewModalVisible] = useState(false);
-  const [downloadForm] = Form.useForm();
+  const [samples, setSamples] = useState<IContentSample[]>([]);
+  const [records, setRecords] = useState<IContentDetectionRecord[]>([]);
+  const [selectedSample, setSelectedSample] = useState<IContentSample | null>(null);
+  const [selectedRecord, setSelectedRecord] = useState<IContentDetectionRecord | null>(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [recordDrawerOpen, setRecordDrawerOpen] = useState(false);
 
-  useEffect(() => {
-    fetchOutputs();
-    fetchDetections();
-  }, []);
+  const sampleById = useMemo(() => {
+    return new Map(samples.map((sample) => [sample.id, sample]));
+  }, [samples]);
 
-  const fetchOutputs = async () => {
+  const selectedSampleRecords = useMemo(
+    () => (selectedSample ? records.filter((record) => record.sampleId === selectedSample.id) : []),
+    [records, selectedSample],
+  );
+
+  const selectedRecordSample = selectedRecord?.sampleId ? sampleById.get(selectedRecord.sampleId) || null : null;
+
+  const getRecordLinkedSample = (record: IContentDetectionRecord) =>
+    record.sampleId ? sampleById.get(record.sampleId) || null : null;
+
+  const getRecordSourceTitle = (record: IContentDetectionRecord) => {
+    const sample = getRecordLinkedSample(record);
+    return sample?.title || record.sourceTitle || record.filename;
+  };
+
+  const getRecordSourcePrompt = (record: IContentDetectionRecord) => {
+    const sample = getRecordLinkedSample(record);
+    return sample?.prompt || record.sourcePrompt || record.filename;
+  };
+
+  const getRecordSourceModuleLabel = (record: IContentDetectionRecord) => {
+    const sample = getRecordLinkedSample(record);
+    const sourceModule = sample?.sourceModule || record.sourceModule;
+    return sourceModule ? SOURCE_MODULE_LABELS[sourceModule] || "手动检测" : "手动检测";
+  };
+
+  const getRecordGenerationModelName = (record: IContentDetectionRecord) => {
+    const sample = getRecordLinkedSample(record);
+    return getGenerationModelLabel(sample?.model || record.sourceModel);
+  };
+
+  const getRecordDisplayModelName = (record: IContentDetectionRecord) =>
+    getRecordGenerationModelName(record) || inferRecordDetectorModelName(record);
+
+  const getRecordMediaUrl = (record: IContentDetectionRecord) => {
+    const sample = getRecordLinkedSample(record);
+    return sample?.fullUrl || record.sourceUrl || record.previewUrl || "";
+  };
+
+  const stats = useMemo(() => {
+    const detectedSampleIds = new Set(records.map((record) => record.sampleId).filter(Boolean));
+    const highRiskCount = records.filter(isHighRiskRecord).length;
+
+    return {
+      total: samples.length,
+      image: samples.filter((sample) => sample.type === "image").length,
+      video: samples.filter((sample) => sample.type === "video").length,
+      detected: samples.filter(
+        (sample) => sample.detectionStatus.fake || sample.detectionStatus.unsafe || detectedSampleIds.has(sample.id),
+      ).length,
+      highRisk: highRiskCount,
+    };
+  }, [records, samples]);
+
+  const loadData = async () => {
     try {
       setLoading(true);
-      const response: any = await request.get("/data/outputs");
-      if (response && response.data) {
-        setOutputs(response.data);
-      }
+      const [nextSamples, nextRecords] = await Promise.all([fetchGeneratedSamples(), fetchDetectionRecords()]);
+      setSamples(nextSamples);
+      setRecords(nextRecords);
     } catch (error) {
-      console.error("Fetch outputs error:", error);
-      message.error("加载生成内容失败");
-      setOutputs([]);
+      console.error("Load content center error:", error);
+      message.error("加载样本与检测记录失败，请确认后端代理已启动");
     } finally {
       setLoading(false);
     }
   };
 
-  const fetchDetections = async () => {
+  useEffect(() => {
+    void loadData();
+  }, []);
+
+  const handleOpenDetail = (sample: IContentSample) => {
+    setSelectedSample(sample);
+    setDrawerOpen(true);
+  };
+
+  const handleOpenRecordDetail = (record: IContentDetectionRecord) => {
+    setSelectedRecord(record);
+    setRecordDrawerOpen(true);
+  };
+
+  const handleSendToDetect = (sample: IContentSample, target: TGeneratedDetectTarget) => {
+    sendContentSampleToDetect({ navigate, sample, target });
+  };
+
+  const handleDownload = async (sample: IContentSample) => {
     try {
-      const response: any = await request.get("/data/detections");
-      if (response && response.data) {
-        setDetections(response.data);
-      }
+      await downloadMedia(sample.fullUrl, buildDownloadFilename(sample));
+      message.success("样本下载成功");
     } catch (error) {
-      console.error("Fetch detections error:", error);
-      setDetections([]);
+      console.error("Download sample error:", error);
+      window.open(sample.fullUrl, "_blank");
+      message.info("已在新标签页打开样本，可手动保存");
     }
   };
 
-  const handlePreview = (item: OutputItem) => {
-    setSelectedItem(item);
-    setPreviewModalVisible(true);
-  };
+  const handleDownloadRecordMedia = async (record: IContentDetectionRecord) => {
+    const sample = getRecordLinkedSample(record);
+    const url = getRecordMediaUrl(record);
 
-  const handleDownloadClick = (item: OutputItem) => {
-    setSelectedItem(item);
-    setDownloadModalVisible(true);
-  };
+    if (!url || url.startsWith("blob:")) {
+      message.warning("该检测记录没有可下载的持久媒体地址");
+      return;
+    }
 
-  const handleDownload = async () => {
     try {
-      const values = await downloadForm.validateFields();
-      message.success(`正在下载 ${selectedItem?.title}，格式：${values.format}`);
-      setDownloadModalVisible(false);
-      downloadForm.resetFields();
+      await downloadMedia(url, sample ? buildDownloadFilename(sample) : record.filename);
+      message.success("检测对象下载成功");
     } catch (error) {
-      console.error("Download error:", error);
+      console.error("Download record media error:", error);
+      window.open(url, "_blank");
+      message.info("已在新标签页打开检测对象，可手动保存");
     }
   };
 
-  const renderOutputCard = (item: OutputItem) => (
-    <Card
-      key={item.id}
-      hoverable
-      cover={
-        <div style={{ height: 200, overflow: "hidden", background: "#f0f0f0" }}>
-          <Image
-            src={item.thumbnailUrl}
-            alt={item.title}
-            style={{ width: "100%", height: "100%", objectFit: "cover" }}
-            preview={false}
-          />
-        </div>
-      }
-      actions={[
-        <Button type="text" icon={<EyeOutlined />} onClick={() => handlePreview(item)}>
-          预览
-        </Button>,
-        <Button type="text" icon={<DownloadOutlined />} onClick={() => handleDownloadClick(item)}>
-          下载
-        </Button>,
-        <Button type="text" icon={<ShareAltOutlined />}>
-          投放
-        </Button>,
-      ]}
-    >
-      <Card.Meta
-        title={
-          <Space>
-            {item.type === "image" ? (
-              <FileImageOutlined style={{ color: "#1890ff" }} />
-            ) : (
-              <VideoCameraOutlined style={{ color: "#52c41a" }} />
-            )}
-            <Text ellipsis style={{ maxWidth: 180 }}>
-              {item.title}
-            </Text>
-          </Space>
+  const handleDelete = (sample: IContentSample) => {
+    Modal.confirm({
+      title: "删除样本",
+      content: "只会从生成样本库移除该样本，已产生的检测记录会继续保留用于追溯。",
+      okText: "删除",
+      okButtonProps: { danger: true },
+      cancelText: "取消",
+      onOk: async () => {
+        await deleteGeneratedSample(sample.id);
+        message.success("样本已删除，检测记录已保留");
+        if (selectedSample?.id === sample.id) {
+          setDrawerOpen(false);
+          setSelectedSample(null);
         }
-        description={
-          <Space direction="vertical" size={4}>
-            <Text type="secondary" style={{ fontSize: 12 }}>
-              <ClockCircleOutlined /> {item.createdAt}
-            </Text>
-            <Text type="secondary" style={{ fontSize: 12 }}>
-              大小：{item.size}
-            </Text>
-          </Space>
-        }
-      />
-    </Card>
-  );
+        await loadData();
+      },
+    });
+  };
 
-  const outputsTab = (
-    <div>
-      <Paragraph type="secondary" style={{ marginBottom: 16 }}>
-        展示所有通过 DScan 生成的图像和视频内容，支持预览、下载和批量导出。
-      </Paragraph>
+  const renderMediaPreview = (sample: IContentSample, compact = false) => {
+    const className = compact ? "content-media-thumb is-compact" : "content-media-thumb";
 
-      {loading ? (
-        <div style={{ textAlign: "center", padding: "80px 0" }}>
-          <Spin size="large" />
+    if (sample.type === "video") {
+      return (
+        <div className={className}>
+          <video src={sample.fullUrl} muted={compact} controls={!compact} preload="metadata" />
+          <VideoCameraOutlined className="content-media-type-icon" />
         </div>
-      ) : outputs.length > 0 ? (
-        <>
-          <Row gutter={[16, 16]}>
-            {outputs.map((item) => (
-              <Col xs={24} sm={12} md={8} lg={6} key={item.id}>
-                {renderOutputCard(item)}
-              </Col>
-            ))}
-          </Row>
+      );
+    }
 
-          <div style={{ textAlign: "center", marginTop: 24 }}>
-            <Button size="large" icon={<DownloadOutlined />}>
-              批量导出
-            </Button>
-          </div>
-        </>
-      ) : (
-        <Empty description="暂无生成产物" />
-      )}
-    </div>
-  );
-
-  const detectionsTab = (
-    <div>
-      <Paragraph type="secondary" style={{ marginBottom: 16 }}>
-        记录所有检测任务的历史结果，包括虚假内容检测和不安全内容检测。
-      </Paragraph>
-
-      {detections.length > 0 ? (
-        <Card>
-          <Space direction="vertical" style={{ width: "100%" }} size="middle">
-            {detections.map((record) => (
-              <Card key={record.id} size="small">
-                <Row align="middle">
-                  <Col xs={24} sm={8}>
-                    <Space>
-                      <Tag color={record.type === "fake" ? "blue" : "orange"}>
-                        {record.type === "fake" ? "虚假检测" : "安全检测"}
-                      </Tag>
-                      <Text strong>{record.filename}</Text>
-                    </Space>
-                  </Col>
-                  <Col xs={24} sm={6}>
-                    <Text>
-                      结果：
-                      <Tag color={record.result === "真实" || record.result.includes("低") ? "success" : "error"}>
-                        {record.result}
-                      </Tag>
-                    </Text>
-                  </Col>
-                  <Col xs={24} sm={6}>
-                    {record.confidence && <Text type="secondary">置信度：{Math.round(record.confidence * 100)}%</Text>}
-                    {record.riskScore && <Text type="secondary">风险：{Math.round(record.riskScore * 100)}%</Text>}
-                  </Col>
-                  <Col xs={24} sm={4} style={{ textAlign: "right" }}>
-                    <Text type="secondary" style={{ fontSize: 12 }}>
-                      {record.createdAt}
-                    </Text>
-                  </Col>
-                </Row>
-              </Card>
-            ))}
-          </Space>
-        </Card>
-      ) : (
-        <Empty description="暂无检测记录" />
-      )}
-    </div>
-  );
-
-  if (!MODULE_AVAILABLE) {
     return (
-      <div className="page-transition">
-        <div className="page-header">
-          <Title level={2} className="page-title">
-            内容与记录管理
-          </Title>
-          <Paragraph className="page-description">
-            本模块将支持生成产物与检测记录的集中管理（按类型筛选、预览、下载及元数据导出）。当前功能暂未开放，敬请期待。
-          </Paragraph>
-        </div>
-        <Card bordered={false} style={{ maxWidth: 520, margin: "40px auto", textAlign: "center" }}>
-          <Space direction="vertical" size="large" style={{ width: "100%" }}>
-            <div>
-              <ToolOutlined style={{ fontSize: 56, color: "var(--color-text-muted)" }} />
-            </div>
-            <div>
-              <Title level={4} style={{ marginBottom: 8 }}>
-                功能暂未开放
-              </Title>
-              <Paragraph type="secondary" style={{ marginBottom: 0 }}>
-                内容与记录管理模块正在规划或开发中，暂时无法使用。您可先使用「生成模块」与「检测模块」进行实验。
-              </Paragraph>
-            </div>
-            <Space size="middle">
-              <Button type="primary" icon={<HomeOutlined />} onClick={() => navigate("/")}>
-                返回首页
-              </Button>
-              <Button icon={<ThunderboltOutlined />} onClick={() => navigate("/generate/deepfake")}>
-                生成模块
-              </Button>
-              <Button icon={<ScanOutlined />} onClick={() => navigate("/detect/fake")}>
-                检测模块
-              </Button>
-            </Space>
-          </Space>
-        </Card>
+      <div className={className}>
+        <Image src={sample.thumbnailUrl} alt={sample.title} preview={false} />
+        <FileImageOutlined className="content-media-type-icon" />
       </div>
     );
-  }
+  };
+
+  const renderDetectionStatus = (sample: IContentSample) => (
+    <Space size={6} wrap>
+      <Tag color={sample.detectionStatus.fake ? "blue" : "default"}>
+        AI 生成{sample.detectionStatus.fake ? "已测" : "未测"}
+      </Tag>
+      <Tag color={sample.detectionStatus.unsafe ? "orange" : "default"}>
+        敏感{sample.detectionStatus.unsafe ? "已测" : "未测"}
+      </Tag>
+    </Space>
+  );
+
+  const isUsablePreviewUrl = (url?: string) => Boolean(url && !url.startsWith("blob:"));
+
+  const renderRecordPreview = (record: IContentDetectionRecord, compact = true) => {
+    const sample = getRecordLinkedSample(record);
+
+    if (sample) {
+      return renderMediaPreview(sample, compact);
+    }
+
+    const className = compact ? "content-media-thumb is-compact" : "content-media-thumb";
+    const previewUrl = record.sourceThumbnailUrl || record.sourceUrl || record.previewUrl;
+
+    if (isUsablePreviewUrl(previewUrl)) {
+      if (record.mediaType === "video") {
+        return (
+          <div className={className}>
+            <video src={previewUrl} muted={compact} controls={!compact} preload="metadata" />
+            <VideoCameraOutlined className="content-media-type-icon" />
+          </div>
+        );
+      }
+
+      return (
+        <div className={className}>
+          <Image src={previewUrl} alt={record.filename} preview={false} />
+          <FileImageOutlined className="content-media-type-icon" />
+        </div>
+      );
+    }
+
+    return (
+      <div className={`${className} is-placeholder`}>
+        {record.mediaType === "video" ? <VideoCameraOutlined /> : <FileImageOutlined />}
+      </div>
+    );
+  };
+
+  const renderRecordLabelDetails = (record: IContentDetectionRecord) => {
+    const labels = Array.isArray(record.labels) ? record.labels.filter(Boolean) : [];
+
+    if (labels.length === 0) {
+      return <Text type="secondary">无异常标签</Text>;
+    }
+
+    return (
+      <Space direction="vertical" size={6} className="content-record-label-list">
+        {labels.map((label, index) => (
+          <Text key={`${label}-${index}`}>{label}</Text>
+        ))}
+      </Space>
+    );
+  };
+
+  const getRawResultObject = (record: IContentDetectionRecord): Record<string, unknown> => {
+    return typeof record.rawResult === "object" && record.rawResult !== null
+      ? (record.rawResult as Record<string, unknown>)
+      : {};
+  };
+
+  const getRecordSuggestions = (record: IContentDetectionRecord): string[] => {
+    const suggestions = getRawResultObject(record).suggestions;
+    return Array.isArray(suggestions) ? suggestions.map(String) : [];
+  };
+
+  const sampleColumns: ColumnsType<IContentSample> = [
+    {
+      title: "样本",
+      dataIndex: "title",
+      width: 360,
+      render: (_, sample) => (
+        <Space size={12} align="center" className="content-sample-cell">
+          {renderMediaPreview(sample, true)}
+          <div className="content-sample-copy">
+            <Text strong ellipsis={{ tooltip: sample.title }}>
+              {sample.title}
+            </Text>
+            <Text
+                type="secondary"
+                className="content-sample-subtitle"
+                ellipsis={{ tooltip: sample.prompt || getGenerationModelLabel(sample.model) || "-" }}
+              >
+                {sample.prompt || getGenerationModelLabel(sample.model) || "无生成参数"}
+              </Text>
+          </div>
+        </Space>
+      ),
+    },
+    {
+      title: "类型",
+      width: 100,
+      render: (_, sample) => (
+        <Tag icon={sample.type === "image" ? <FileImageOutlined /> : <VideoCameraOutlined />}>
+          {sample.type === "image" ? "图片" : "视频"}
+        </Tag>
+      ),
+    },
+    {
+      title: "来源",
+      dataIndex: "sourceModule",
+      width: 120,
+      render: (value: TGeneratedSourceModule) => SOURCE_MODULE_LABELS[value] || "手动样本",
+    },
+    {
+      title: "检测状态",
+      width: 190,
+      render: (_, sample) => renderDetectionStatus(sample),
+    },
+    {
+      title: "最近结论",
+      width: 180,
+      render: (_, sample) =>
+        sample.latestDetection ? (
+          <Space direction="vertical" size={2}>
+            <Tag color={sample.latestDetection.type === "fake" ? "blue" : "orange"}>
+              {DETECTION_TYPE_LABELS[sample.latestDetection.type]}
+            </Tag>
+            <Text type="secondary">{sample.latestDetection.result}</Text>
+          </Space>
+        ) : (
+          <Text type="secondary">暂无</Text>
+        ),
+    },
+    {
+      title: "创建时间",
+      dataIndex: "createdAt",
+      width: 180,
+      render: formatDateTime,
+    },
+    {
+      title: "操作",
+      fixed: "right",
+      width: 210,
+      render: (_, sample) => (
+        <Space size={4}>
+          <Tooltip title="查看详情">
+            <Button type="text" icon={<EyeOutlined />} onClick={() => handleOpenDetail(sample)} />
+          </Tooltip>
+          <Tooltip title="送到 AI 生成检测">
+            <Button type="text" icon={<ScanOutlined />} onClick={() => handleSendToDetect(sample, "fake")} />
+          </Tooltip>
+          <Tooltip title="送到敏感检测">
+            <Button type="text" icon={<SafetyOutlined />} onClick={() => handleSendToDetect(sample, "unsafe")} />
+          </Tooltip>
+          <Tooltip title="下载">
+            <Button type="text" icon={<DownloadOutlined />} onClick={() => void handleDownload(sample)} />
+          </Tooltip>
+          <Tooltip title="删除">
+            <Button type="text" danger icon={<DeleteOutlined />} onClick={() => handleDelete(sample)} />
+          </Tooltip>
+        </Space>
+      ),
+    },
+  ];
+
+  const recordColumns: ColumnsType<IContentDetectionRecord> = [
+    {
+      title: "检测对象",
+      width: 380,
+      render: (_, record) => (
+        <Space size={12} align="center" className="content-sample-cell">
+          {renderRecordPreview(record, true)}
+          <div className="content-sample-copy">
+            <Text strong ellipsis={{ tooltip: getRecordSourceTitle(record) }}>
+              {getRecordSourceTitle(record)}
+            </Text>
+            <Text
+              type="secondary"
+              className="content-sample-subtitle"
+              ellipsis={{ tooltip: getRecordSourcePrompt(record) }}
+            >
+              {getRecordSourcePrompt(record)}
+            </Text>
+          </div>
+        </Space>
+      ),
+    },
+    {
+      title: "检测结论",
+      width: 230,
+      render: (_, record) => (
+        <Space direction="vertical" size={4}>
+          <Space size={6} wrap>
+            <Tag color={record.type === "fake" ? "blue" : "orange"}>{DETECTION_TYPE_LABELS[record.type]}</Tag>
+            <Tag color={getRecordTagColor(record)}>{record.result}</Tag>
+          </Space>
+          <Text type="secondary">分数：{formatScore(record)}</Text>
+        </Space>
+      ),
+    },
+    {
+      title: "来源",
+      width: 140,
+      render: (_, record) => getRecordSourceModuleLabel(record),
+    },
+    {
+      title: "模型",
+      dataIndex: "model",
+      width: 260,
+      render: (_, record) => (
+        <Text className="content-model-name" ellipsis={{ tooltip: getRecordDisplayModelName(record) }}>
+          {getRecordDisplayModelName(record)}
+        </Text>
+      ),
+    },
+    {
+      title: "时间",
+      dataIndex: "createdAt",
+      width: 180,
+      render: formatDateTime,
+    },
+    {
+      title: "操作",
+      fixed: "right",
+      width: 112,
+      render: (_, record) => (
+        <Space size={4}>
+          <Tooltip title="查看详情">
+            <Button type="text" icon={<EyeOutlined />} onClick={() => handleOpenRecordDetail(record)} />
+          </Tooltip>
+          <Tooltip title="下载检测对象">
+            <Button type="text" icon={<DownloadOutlined />} onClick={() => void handleDownloadRecordMedia(record)} />
+          </Tooltip>
+        </Space>
+      ),
+    },
+  ];
+
+  const compactRecordColumns: ColumnsType<IContentDetectionRecord> = [
+    {
+      title: "类型",
+      width: 120,
+      render: (_, record) => (
+        <Tag color={record.type === "fake" ? "blue" : "orange"}>{DETECTION_TYPE_LABELS[record.type]}</Tag>
+      ),
+    },
+    {
+      title: "结果",
+      width: 140,
+      render: (_, record) => <Tag color={getRecordTagColor(record)}>{record.result}</Tag>,
+    },
+    {
+      title: "分数",
+      width: 90,
+      render: (_, record) => formatScore(record),
+    },
+    {
+      title: "时间",
+      dataIndex: "createdAt",
+      render: formatDateTime,
+    },
+  ];
 
   return (
-    <div>
+    <div className="page-transition content-center-page">
       <div className="page-header">
         <Title level={2} className="page-title">
-          内容与检测记录管理
+          样本与检测记录中心
         </Title>
         <Paragraph className="page-description">
-          集中管理 DScan 内所有生成产物与检测记录，支持按类型筛选、预览、单条/批量下载及元数据查看与导出。
+          集中管理平台生成的图片/视频测试样本，并追踪 AI 生成检测与敏感内容检测结果。
         </Paragraph>
       </div>
 
+      <Row gutter={[16, 16]} className="content-stat-row">
+        <Col xs={12} lg={5}>
+          <Card bordered={false} className="content-stat-card">
+            <Statistic title="总样本" value={stats.total} />
+          </Card>
+        </Col>
+        <Col xs={12} lg={5}>
+          <Card bordered={false} className="content-stat-card">
+            <Statistic title="图片样本" value={stats.image} />
+          </Card>
+        </Col>
+        <Col xs={12} lg={5}>
+          <Card bordered={false} className="content-stat-card">
+            <Statistic title="视频样本" value={stats.video} />
+          </Card>
+        </Col>
+        <Col xs={12} lg={5}>
+          <Card bordered={false} className="content-stat-card is-detected">
+            <Statistic title="已检测样本" value={stats.detected} />
+          </Card>
+        </Col>
+        <Col xs={24} lg={4}>
+          <Card bordered={false} className={`content-stat-card ${stats.highRisk > 0 ? "is-risk" : ""}`}>
+            <Statistic
+              title="高风险记录"
+              value={stats.highRisk}
+              valueStyle={{ color: stats.highRisk > 0 ? "#b91c1c" : undefined }}
+            />
+          </Card>
+        </Col>
+      </Row>
+
       <Tabs
-        defaultActiveKey="outputs"
-        size="large"
+        className="content-center-tabs"
+        defaultActiveKey="samples"
+        tabBarExtraContent={
+          <Button icon={<ReloadOutlined />} onClick={() => void loadData()} loading={loading}>
+            刷新
+          </Button>
+        }
         items={[
           {
-            key: "outputs",
-            label: "生成产物",
-            icon: <PictureOutlined />,
-            children: outputsTab,
+            key: "samples",
+            label: "生成样本",
+            children: (
+              <Table
+                className="content-sample-table"
+                rowKey="id"
+                loading={loading}
+                columns={sampleColumns}
+                dataSource={samples}
+                pagination={{ pageSize: 8, showSizeChanger: false }}
+                scroll={{ x: 1320 }}
+                locale={{
+                  emptyText: (
+                    <Empty
+                      image={Empty.PRESENTED_IMAGE_SIMPLE}
+                      description="暂无样本。生成内容后点击保存，或使用一键送检自动写入样本库。"
+                    />
+                  ),
+                }}
+              />
+            ),
           },
           {
-            key: "detections",
+            key: "records",
             label: "检测记录",
-            icon: <EyeOutlined />,
-            children: detectionsTab,
+            children: (
+              <Table
+                rowKey="id"
+                loading={loading}
+                columns={recordColumns}
+                dataSource={records}
+                pagination={{ pageSize: 10, showSizeChanger: false }}
+                scroll={{ x: 1320 }}
+                locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无检测记录" /> }}
+              />
+            ),
           },
         ]}
       />
 
-      {/* 预览模态框 */}
-      <Modal
-        title={selectedItem?.title}
-        open={previewModalVisible}
-        onCancel={() => setPreviewModalVisible(false)}
-        footer={[
-          <Button key="close" onClick={() => setPreviewModalVisible(false)}>
-            关闭
-          </Button>,
-          <Button
-            key="download"
-            type="primary"
-            icon={<DownloadOutlined />}
-            onClick={() => {
-              setPreviewModalVisible(false);
-              if (selectedItem) handleDownloadClick(selectedItem);
-            }}
-          >
-            下载
-          </Button>,
-        ]}
-        width={800}
+      <Drawer
+        title="样本详情"
+        width={640}
+        open={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        extra={
+          selectedSample && (
+            <Space>
+              <Button icon={<ScanOutlined />} onClick={() => handleSendToDetect(selectedSample, "fake")}>
+                AI 生成检测
+              </Button>
+              <Button icon={<SafetyOutlined />} onClick={() => handleSendToDetect(selectedSample, "unsafe")}>
+                敏感检测
+              </Button>
+            </Space>
+          )
+        }
       >
-        {selectedItem?.type === "image" ? (
-          <Image src={selectedItem.fullUrl} alt={selectedItem.title} />
-        ) : (
-          <video src={selectedItem?.fullUrl} controls style={{ width: "100%", maxHeight: 500 }}>
-            您的浏览器不支持视频播放
-          </video>
-        )}
-      </Modal>
+        {selectedSample ? (
+          <Space direction="vertical" size="large" style={{ width: "100%" }}>
+            <div className="content-detail-preview">{renderMediaPreview(selectedSample)}</div>
+            <Descriptions column={1} size="small" bordered>
+              <Descriptions.Item label="标题">{selectedSample.title}</Descriptions.Item>
+              <Descriptions.Item label="类型">{selectedSample.type === "image" ? "图片" : "视频"}</Descriptions.Item>
+              <Descriptions.Item label="来源">{SOURCE_MODULE_LABELS[selectedSample.sourceModule]}</Descriptions.Item>
+              <Descriptions.Item label="模型">{getGenerationModelLabel(selectedSample.model) || "-"}</Descriptions.Item>
+              <Descriptions.Item label="大小">{selectedSample.size}</Descriptions.Item>
+              <Descriptions.Item label="创建时间">{formatDateTime(selectedSample.createdAt)}</Descriptions.Item>
+              <Descriptions.Item label="检测状态">{renderDetectionStatus(selectedSample)}</Descriptions.Item>
+              <Descriptions.Item label="生成描述">{selectedSample.prompt || "-"}</Descriptions.Item>
+            </Descriptions>
+            <div>
+              <Title level={5}>检测历史</Title>
+              <Table
+                rowKey="id"
+                size="small"
+                columns={compactRecordColumns}
+                dataSource={selectedSampleRecords}
+                pagination={false}
+                locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无关联检测记录" /> }}
+              />
+            </div>
+          </Space>
+        ) : null}
+      </Drawer>
 
-      {/* 下载配置模态框 */}
-      <Modal
-        title="下载选项"
-        open={downloadModalVisible}
-        onOk={handleDownload}
-        onCancel={() => {
-          setDownloadModalVisible(false);
-          downloadForm.resetFields();
-        }}
-        okText="开始下载"
-        cancelText="取消"
+      <Drawer
+        title="检测记录详情"
+        width={680}
+        open={recordDrawerOpen}
+        onClose={() => setRecordDrawerOpen(false)}
+        extra={
+          selectedRecordSample && (
+            <Space>
+              <Button icon={<ScanOutlined />} onClick={() => handleSendToDetect(selectedRecordSample, "fake")}>
+                AI 生成检测
+              </Button>
+              <Button icon={<SafetyOutlined />} onClick={() => handleSendToDetect(selectedRecordSample, "unsafe")}>
+                敏感检测
+              </Button>
+            </Space>
+          )
+        }
       >
-        <Form
-          form={downloadForm}
-          layout="vertical"
-          initialValues={{
-            format: selectedItem?.type === "video" ? "MP4" : "PNG",
-            resolution: "original",
-            batch: false,
-          }}
-        >
-          <Form.Item label="文件格式" name="format" rules={[{ required: true, message: "请选择格式" }]}>
-            <Select>
-              {selectedItem?.type === "video" ? (
-                <>
-                  <Select.Option value="MP4">MP4</Select.Option>
-                  <Select.Option value="MOV">MOV</Select.Option>
-                  <Select.Option value="AVI">AVI</Select.Option>
-                </>
-              ) : (
-                <>
-                  <Select.Option value="PNG">PNG</Select.Option>
-                  <Select.Option value="JPG">JPG</Select.Option>
-                  <Select.Option value="WEBP">WEBP</Select.Option>
-                </>
-              )}
-            </Select>
-          </Form.Item>
+        {selectedRecord ? (
+          <Space direction="vertical" size="large" style={{ width: "100%" }}>
+            <div className="content-detail-preview">{renderRecordPreview(selectedRecord, false)}</div>
+            <Descriptions column={1} size="small" bordered>
+              <Descriptions.Item label="检测类型">{DETECTION_TYPE_LABELS[selectedRecord.type]}</Descriptions.Item>
+              <Descriptions.Item label="检测对象">
+                {getRecordSourceTitle(selectedRecord)}
+              </Descriptions.Item>
+              <Descriptions.Item label="媒体类型">
+                {selectedRecord.mediaType === "image" ? "图片" : "视频"}
+              </Descriptions.Item>
+              <Descriptions.Item label="来源">
+                {getRecordSourceModuleLabel(selectedRecord)}
+              </Descriptions.Item>
+              <Descriptions.Item label="结果">
+                <Tag color={getRecordTagColor(selectedRecord)}>{selectedRecord.result}</Tag>
+              </Descriptions.Item>
+              <Descriptions.Item label="分数">{formatScore(selectedRecord)}</Descriptions.Item>
+              <Descriptions.Item label="生成模型">{getRecordGenerationModelName(selectedRecord) || "-"}</Descriptions.Item>
+              <Descriptions.Item label="检测模型">{inferRecordDetectorModelName(selectedRecord)}</Descriptions.Item>
+              <Descriptions.Item label="时间">{formatDateTime(selectedRecord.createdAt)}</Descriptions.Item>
+              <Descriptions.Item label="标签/特征">{renderRecordLabelDetails(selectedRecord)}</Descriptions.Item>
+            </Descriptions>
 
-          <Form.Item label="分辨率" name="resolution" rules={[{ required: true, message: "请选择分辨率" }]}>
-            <Select>
-              <Select.Option value="original">原始分辨率</Select.Option>
-              <Select.Option value="720p">720p</Select.Option>
-              <Select.Option value="1080p">1080p</Select.Option>
-              <Select.Option value="4k">4K</Select.Option>
-            </Select>
-          </Form.Item>
+            {getRecordSuggestions(selectedRecord).length > 0 && (
+              <div>
+                <Title level={5}>处理建议</Title>
+                <Space direction="vertical" size={6}>
+                  {getRecordSuggestions(selectedRecord).map((suggestion, index) => (
+                    <Text key={`${suggestion}-${index}`}>{suggestion}</Text>
+                  ))}
+                </Space>
+              </div>
+            )}
 
-          <Form.Item label="批量导出" name="batch" valuePropName="checked">
-            <Switch />
-          </Form.Item>
-        </Form>
-      </Modal>
+            <div>
+              <Title level={5}>原始检测结果</Title>
+              <pre className="content-record-json">{JSON.stringify(selectedRecord.rawResult || {}, null, 2)}</pre>
+            </div>
+          </Space>
+        ) : null}
+      </Drawer>
     </div>
   );
 };

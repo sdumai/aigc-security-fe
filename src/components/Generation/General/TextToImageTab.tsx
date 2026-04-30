@@ -39,6 +39,7 @@ import { sendGeneratedResultToDetect } from "@/utils/detectTransfer";
 import type { IImageGenerateResult, ITextToImageFormValues } from "@/typings/generate";
 import type { TGeneratedDetectTarget } from "@/typings/detect";
 import { downloadMedia } from "@/utils/media";
+import { getGenerationModelLabel } from "@/utils/modelLabels";
 
 const { Paragraph } = Typography;
 const { TextArea } = Input;
@@ -55,6 +56,7 @@ export const TextToImageTab = () => {
   const imageModel = watchedImageModel || DEFAULT_IMAGE_MODEL;
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<IImageGenerateResult | null>(null);
+  const [savedSampleId, setSavedSampleId] = useState<string | undefined>();
   const isStableDiffusion = imageModel === "stable-diffusion";
   const isSeedream5 = imageModel === "volc";
   const isArkImageModel = !isStableDiffusion;
@@ -79,6 +81,7 @@ export const TextToImageTab = () => {
       const shouldUseArkOptions = values.imageModel !== "stable-diffusion";
       setLoading(true);
       setResult(null);
+      setSavedSampleId(undefined);
       setResult(
         await generateTextToImage({
           model: values.imageModel,
@@ -122,11 +125,16 @@ export const TextToImageTab = () => {
 
     try {
       const values = form.getFieldsValue();
-      await saveGeneratedContent({
+      const modelLabel = getGenerationModelLabel(values.imageModel);
+      const sample = await saveGeneratedContent({
         type: "image",
         title: `AI 图像生成 - ${(values.prompt || "").substring(TITLE_PROMPT_PREVIEW_START_INDEX, TITLE_PROMPT_PREVIEW_LENGTH)}...`,
         url: result.imageUrl,
+        sourceModule: "text-to-image",
+        model: modelLabel,
+        prompt: values.prompt,
       });
+      setSavedSampleId(sample.id);
       message.success({ content: "图像已保存！可在内容管理中查看", duration: MESSAGE_DURATION_SECONDS });
       setTimeout(() => navigate(DATA_OUTPUT_ROUTE), SAVE_NAVIGATION_DELAY_MS);
     } catch (error) {
@@ -134,14 +142,43 @@ export const TextToImageTab = () => {
     }
   };
 
-  const handleSendToDetect = (target: TGeneratedDetectTarget) => {
+  const handleSendToDetect = async (target: TGeneratedDetectTarget) => {
+    if (!result?.imageUrl) {
+      message.warning("暂无可送检的生成图片");
+      return;
+    }
+
     const values = form.getFieldsValue();
+    const modelLabel = getGenerationModelLabel(values.imageModel);
+    let sampleId = savedSampleId;
+
+    try {
+      if (!sampleId) {
+        const sample = await saveGeneratedContent({
+          type: "image",
+          title: `AI 图像生成 - ${(values.prompt || "").substring(TITLE_PROMPT_PREVIEW_START_INDEX, TITLE_PROMPT_PREVIEW_LENGTH)}...`,
+          url: result.imageUrl,
+          sourceModule: "text-to-image",
+          model: modelLabel,
+          prompt: values.prompt,
+        });
+        sampleId = sample.id;
+        setSavedSampleId(sample.id);
+      }
+    } catch (error) {
+      console.error("Save sample before detect error:", error);
+      message.warning("样本记录保存失败，仍继续送检");
+    }
+
     const sent = sendGeneratedResultToDetect({
       navigate,
       result,
       mediaType: "image",
       target,
       title: values.prompt,
+      model: modelLabel,
+      sourceModule: "text-to-image",
+      sampleId,
     });
 
     if (!sent) {
@@ -272,7 +309,10 @@ export const TextToImageTab = () => {
           onSendToDetect={handleSendToDetect}
           onDownload={handleDownload}
           onSave={handleSave}
-          onReset={() => setResult(null)}
+          onReset={() => {
+            setResult(null);
+            setSavedSampleId(undefined);
+          }}
         />
       </Col>
     </Row>

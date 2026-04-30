@@ -47,6 +47,7 @@ const DeepfakeGeneratePage = () => {
   const [form] = Form.useForm<IDeepfakeFormValues>();
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<IGenerateResult | null>(null);
+  const [savedSampleId, setSavedSampleId] = useState<string | undefined>();
   const [targetFile, setTargetFile] = useState<UploadFile[]>([]);
   const [sourceFile, setSourceFile] = useState<UploadFile[]>([]);
   const [functionType, setFunctionType] = useState<TDeepfakeFunction>(DEEPFAKE_DEFAULT_FUNCTION);
@@ -89,6 +90,7 @@ const DeepfakeGeneratePage = () => {
 
       setLoading(true);
       setResult(null);
+      setSavedSampleId(undefined);
 
       if (values.function === "faceswap") {
         const templateBase64 = await getTargetImageBase64();
@@ -195,12 +197,15 @@ const DeepfakeGeneratePage = () => {
       const values = form.getFieldsValue();
       const currentFunctionType = values.function || DEEPFAKE_DEFAULT_FUNCTION;
 
-      await saveGeneratedContent({
+      const sample = await saveGeneratedContent({
         type: result?.videoUrl ? "video" : "image",
         title: `Deepfake ${DEEPFAKE_FUNCTION_LABELS[currentFunctionType]}`,
         url: saveUrl,
+        sourceModule: "deepfake",
         model: values.model,
+        prompt: values.fommPrompt || values.editPrompt || DEEPFAKE_FUNCTION_LABELS[currentFunctionType],
       });
+      setSavedSampleId(sample.id);
       message.success({ content: "内容已保存！可在内容管理中查看", duration: MESSAGE_DURATION_SECONDS });
       setTimeout(() => navigate(DATA_OUTPUT_ROUTE), SAVE_NAVIGATION_DELAY_MS);
     } catch (error) {
@@ -208,15 +213,45 @@ const DeepfakeGeneratePage = () => {
     }
   };
 
-  const handleSendToDetect = (target: TGeneratedDetectTarget) => {
+  const handleSendToDetect = async (target: TGeneratedDetectTarget) => {
+    const saveUrl = result?.videoUrl || result?.imageUrl;
+
+    if (!saveUrl) {
+      message.warning("暂无可送检的生成结果");
+      return;
+    }
+
     const values = form.getFieldsValue();
     const currentFunctionType = values.function || DEEPFAKE_DEFAULT_FUNCTION;
+    let sampleId = savedSampleId;
+
+    try {
+      if (!sampleId) {
+        const sample = await saveGeneratedContent({
+          type: result?.videoUrl ? "video" : "image",
+          title: `Deepfake ${DEEPFAKE_FUNCTION_LABELS[currentFunctionType]}`,
+          url: saveUrl,
+          sourceModule: "deepfake",
+          model: values.model,
+          prompt: values.fommPrompt || values.editPrompt || DEEPFAKE_FUNCTION_LABELS[currentFunctionType],
+        });
+        sampleId = sample.id;
+        setSavedSampleId(sample.id);
+      }
+    } catch (error) {
+      console.error("Save sample before detect error:", error);
+      message.warning("样本记录保存失败，仍继续送检");
+    }
+
     const sent = sendGeneratedResultToDetect({
       navigate,
       result,
       mediaType: result?.videoUrl ? "video" : "image",
       target,
       title: `Deepfake ${DEEPFAKE_FUNCTION_LABELS[currentFunctionType]}`,
+      model: values.model,
+      sourceModule: "deepfake",
+      sampleId,
     });
 
     if (!sent) {
@@ -266,7 +301,10 @@ const DeepfakeGeneratePage = () => {
             onSendToDetect={handleSendToDetect}
             onDownload={handleDownload}
             onSave={handleSave}
-            onReset={() => setResult(null)}
+            onReset={() => {
+              setResult(null);
+              setSavedSampleId(undefined);
+            }}
           />
         </Col>
       </Row>

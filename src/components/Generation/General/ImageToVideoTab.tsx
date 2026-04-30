@@ -85,6 +85,7 @@ import {
   getUploadPreviewUrl,
   readBlobAsDataUrl,
 } from "@/utils/media";
+import { getGenerationModelLabel } from "@/utils/modelLabels";
 
 const { Paragraph } = Typography;
 const { TextArea } = Input;
@@ -104,6 +105,7 @@ export const ImageToVideoTab = () => {
   const imageMode = watchedImageMode || DEFAULT_I2V_MODE;
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<IVideoGenerateResult | null>(null);
+  const [savedSampleId, setSavedSampleId] = useState<string | undefined>();
   const [refImages, setRefImages] = useState<UploadFile[]>([]);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewUrl, setPreviewUrl] = useState("");
@@ -266,6 +268,7 @@ export const ImageToVideoTab = () => {
 
       setLoading(true);
       setResult(null);
+      setSavedSampleId(undefined);
       setResult(
         await generateImageToVideo({
           model: values.imageToVideoModel,
@@ -314,11 +317,16 @@ export const ImageToVideoTab = () => {
 
     try {
       const values = form.getFieldsValue();
-      await saveGeneratedContent({
+      const modelLabel = getGenerationModelLabel(values.imageToVideoModel);
+      const sample = await saveGeneratedContent({
         type: "video",
         title: `AI 图生视频 - ${(values.prompt || "").substring(TITLE_PROMPT_PREVIEW_START_INDEX, TITLE_PROMPT_PREVIEW_LENGTH)}...`,
         url: result.videoUrl,
+        sourceModule: "image-to-video",
+        model: modelLabel,
+        prompt: values.prompt,
       });
+      setSavedSampleId(sample.id);
       message.success({ content: "已保存到内容管理", duration: MESSAGE_DURATION_SECONDS });
       setTimeout(() => navigate(DATA_OUTPUT_ROUTE), SAVE_NAVIGATION_DELAY_MS);
     } catch (error) {
@@ -326,14 +334,43 @@ export const ImageToVideoTab = () => {
     }
   };
 
-  const handleSendToDetect = (target: TGeneratedDetectTarget) => {
+  const handleSendToDetect = async (target: TGeneratedDetectTarget) => {
+    if (!result?.videoUrl) {
+      message.warning("暂无可送检的生成视频");
+      return;
+    }
+
     const values = form.getFieldsValue();
+    const modelLabel = getGenerationModelLabel(values.imageToVideoModel);
+    let sampleId = savedSampleId;
+
+    try {
+      if (!sampleId) {
+        const sample = await saveGeneratedContent({
+          type: "video",
+          title: `AI 图生视频 - ${(values.prompt || "").substring(TITLE_PROMPT_PREVIEW_START_INDEX, TITLE_PROMPT_PREVIEW_LENGTH)}...`,
+          url: result.videoUrl,
+          sourceModule: "image-to-video",
+          model: modelLabel,
+          prompt: values.prompt,
+        });
+        sampleId = sample.id;
+        setSavedSampleId(sample.id);
+      }
+    } catch (error) {
+      console.error("Save sample before detect error:", error);
+      message.warning("样本记录保存失败，仍继续送检");
+    }
+
     const sent = sendGeneratedResultToDetect({
       navigate,
       result,
       mediaType: "video",
       target,
       title: values.prompt,
+      model: modelLabel,
+      sourceModule: "image-to-video",
+      sampleId,
     });
 
     if (!sent) {
@@ -608,7 +645,10 @@ export const ImageToVideoTab = () => {
             onSendToDetect={handleSendToDetect}
             onDownload={handleDownload}
             onSave={handleSave}
-            onReset={() => setResult(null)}
+            onReset={() => {
+              setResult(null);
+              setSavedSampleId(undefined);
+            }}
           />
         </Col>
       </Row>

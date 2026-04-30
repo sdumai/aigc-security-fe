@@ -65,7 +65,11 @@ export interface IGeneratedDetectTransfer {
   url: string;
   format?: TMediaFormat;
   title?: string;
+  model?: string;
+  sourceModule?: string;
   filename: string;
+  sampleId?: string;
+  storageType?: "local" | "remote";
   createdAt: number;
 }
 

@@ -1,4 +1,4 @@
-import { Layout, Menu, Tooltip } from "antd";
+import { Layout, Menu } from "antd";
 import { useNavigate, useLocation } from "react-router-dom";
 import {
   HomeOutlined,
@@ -41,12 +41,7 @@ const menuItems: MenuItem[] = [
   {
     key: "/data/output",
     icon: <DatabaseOutlined />,
-    label: (
-      <Tooltip title="该模块暂未开放，敬请期待" placement="right">
-        <span>内容管理</span>
-      </Tooltip>
-    ),
-    disabled: true,
+    label: "内容管理",
   },
 ];
 

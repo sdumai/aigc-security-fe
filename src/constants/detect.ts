@@ -38,7 +38,7 @@ export const DEFAULT_IMAGE_DETECT_BACKEND: TImageDetectBackend = "volc";
 export const DEFAULT_UNSAFE_MODEL = "Google-SafeSearch";
 
 export const IMAGE_DETECT_BACKENDS: ISelectOption<TImageDetectBackend>[] = [
-  { value: "volc", label: "Doubao Seed 2.0 Pro" },
+  { value: "volc", label: "Seed 2.0 Pro" },
   { value: "universal", label: "Universal Fake Detect" },
 ];
 
@@ -59,7 +59,7 @@ export const FAKE_DETECT_MODEL_INTROS: Array<{
 }> = [
   {
     backend: "volc",
-    name: "Doubao Seed 2.0 Pro",
+    name: "Seed 2.0 Pro",
     badge: "方舟视觉理解",
     summary: "基于火山方舟视觉理解模型，判断 AI 生成、合成或深度伪造痕迹，适合语义层面的真伪复核。",
     strengths: ["URL/Base64", "JSON 输出", "人工复核"],
@@ -76,9 +76,9 @@ export const FAKE_DETECT_MODEL_INTROS: Array<{
 ];
 
 export const UNSAFE_DETECT_MODEL_INTRO = {
-  name: "方舟视觉安全审核",
+  name: "Seed 2.0 Pro",
   badge: "固定审核链路",
-  summary: "敏感内容检测统一走火山方舟视觉理解链路，识别暴力、色情、仇恨、毒品赌博等风险标签。",
+  summary: "敏感内容检测统一走 Seed 2.0 Pro 视觉理解链路，识别暴力、色情、仇恨、毒品赌博等风险标签。",
   strengths: ["图/视频统一", "风险标签", "合规初筛"],
   tradeoff: "当前页面不再暴露模型下拉选择，减少误导性配置。",
 };
