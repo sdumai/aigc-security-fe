@@ -68,7 +68,9 @@ import {
 import { MediaResultCard } from "@/components/Generation/common/MediaResultCard";
 import { generateTextToVideo } from "@/services/generate";
 import { saveGeneratedContent } from "@/services/content";
+import { sendGeneratedResultToDetect } from "@/utils/detectTransfer";
 import type { ITextToVideoFormValues, IVideoGenerateResult } from "@/typings/generate";
+import type { TGeneratedDetectTarget } from "@/typings/detect";
 import { dataUrlToBlob, downloadMedia } from "@/utils/media";
 
 const { Paragraph } = Typography;
@@ -233,6 +235,21 @@ export const TextToVideoTab = () => {
       setTimeout(() => navigate(DATA_OUTPUT_ROUTE), SAVE_NAVIGATION_DELAY_MS);
     } catch (error) {
       console.error("Save error:", error);
+    }
+  };
+
+  const handleSendToDetect = (target: TGeneratedDetectTarget) => {
+    const values = form.getFieldsValue();
+    const sent = sendGeneratedResultToDetect({
+      navigate,
+      result,
+      mediaType: "video",
+      target,
+      title: values.prompt,
+    });
+
+    if (!sent) {
+      message.warning("暂无可送检的生成视频");
     }
   };
 
@@ -441,6 +458,7 @@ export const TextToVideoTab = () => {
           emptyText="视频将在生成后显示在这里"
           result={result}
           videoSrc={previewSrc}
+          onSendToDetect={handleSendToDetect}
           onDownload={handleDownload}
           onSave={handleSave}
           onReset={() => setResult(null)}

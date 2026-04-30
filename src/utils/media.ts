@@ -78,6 +78,11 @@ export const dataUrlToBlob = (dataUrl: string): Blob => {
   return new Blob([bytes], { type: match[DATA_URL_MIME_MATCH_INDEX] || "application/octet-stream" });
 };
 
+export const dataUrlToFile = (dataUrl: string, filename: string): File => {
+  const blob = dataUrlToBlob(dataUrl);
+  return new File([blob], filename, { type: blob.type || "application/octet-stream" });
+};
+
 export const normalizeImageUrlFromApi = (rawUrl: string): { imageUrl: string; format: TMediaFormat } => {
   const trimmedUrl = rawUrl.trim();
   const isDataUrl =

@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useLocation } from "react-router-dom";
 import { Col, message, Row, Tabs, Typography } from "antd";
 import { PictureOutlined, VideoCameraOutlined } from "@ant-design/icons";
 import type { UploadFile, UploadProps } from "antd";
@@ -24,12 +25,14 @@ import {
 import { detectUnsafeImage, detectUnsafeVideo } from "@/services/detect";
 import type { IDetectMediaBody, IUnsafeDetectionResult, TDetectContentKind, TDetectInputTab } from "@/typings/detect";
 import { assertValidUrl, createImageDetectBody, createRemoteUploadFile, createUnsafeReport } from "@/utils/detect";
-import { downloadTextFile } from "@/utils/media";
-import { getBase64FromUploadFile } from "@/utils/media";
+import { getDetectTargetLabel, getGeneratedDetectTransfer, isDataUrl } from "@/utils/detectTransfer";
+import { createUploadFile, dataUrlToFile, downloadTextFile, getBase64FromUploadFile } from "@/utils/media";
 
 const { Title, Paragraph } = Typography;
 
 const UnsafeDetectPage = () => {
+  const location = useLocation();
+  const handledTransferKeyRef = useRef("");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<IUnsafeDetectionResult | null>(null);
   const [uploadedFile, setUploadedFile] = useState<UploadFile | null>(null);
@@ -44,6 +47,66 @@ const UnsafeDetectPage = () => {
   const [videoUploadFileName, setVideoUploadFileName] = useState("");
   const [videoFps, setVideoFps] = useState(DEFAULT_VIDEO_UNDERSTANDING_FPS);
   const [videoInputTab, setVideoInputTab] = useState<TDetectInputTab>("upload");
+
+  useEffect(() => {
+    const transfer = getGeneratedDetectTransfer(location.state, "unsafe");
+
+    if (!transfer) {
+      return;
+    }
+
+    const transferKey = `${transfer.target}-${transfer.mediaType}-${transfer.createdAt}-${transfer.url.length}`;
+    if (handledTransferKeyRef.current === transferKey) {
+      return;
+    }
+    handledTransferKeyRef.current = transferKey;
+
+    setLoading(false);
+    setResult(null);
+    setContentKind(transfer.mediaType);
+    setCurrentStep(DETECT_STEP_READY);
+
+    if (transfer.mediaType === "image") {
+      setVideoUrlInput("");
+      setVideoPreviewUrl("");
+      setVideoUploadFileName("");
+      setVideoFile(null);
+
+      if (isDataUrl(transfer.url)) {
+        const file = dataUrlToFile(transfer.url, transfer.filename);
+        setActiveTab("upload");
+        setUrlInput("");
+        setUploadedFile(createUploadFile(file, transfer.url));
+        setPreviewUrl(transfer.url);
+      } else {
+        setActiveTab("url");
+        setUrlInput(transfer.url);
+        setUploadedFile(createRemoteUploadFile(transfer.url));
+        setPreviewUrl(transfer.url);
+      }
+    } else {
+      setUploadedFile(null);
+      setPreviewUrl("");
+      setUrlInput("");
+
+      if (isDataUrl(transfer.url)) {
+        const file = dataUrlToFile(transfer.url, transfer.filename);
+        setVideoInputTab("upload");
+        setVideoFile(file);
+        setVideoUrlInput("");
+        setVideoPreviewUrl(transfer.url);
+        setVideoUploadFileName(transfer.filename);
+      } else {
+        setVideoInputTab("url");
+        setVideoFile(null);
+        setVideoUrlInput(transfer.url);
+        setVideoPreviewUrl(transfer.url);
+        setVideoUploadFileName(transfer.filename);
+      }
+    }
+
+    message.success(`已送入${getDetectTargetLabel("unsafe")}，可直接开始检测`);
+  }, [location.state]);
 
   const scrollToResult = () => {
     setTimeout(() => window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" }), SCROLL_AFTER_RESULT_DELAY_MS);

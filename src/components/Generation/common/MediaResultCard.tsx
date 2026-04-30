@@ -1,5 +1,5 @@
-import { Button, Card, Image, Space, Spin, Typography } from "antd";
-import { DownloadOutlined, ReloadOutlined, SaveOutlined } from "@ant-design/icons";
+import { Button, Card, Dropdown, Image, Space, Spin, Typography } from "antd";
+import { DownloadOutlined, ReloadOutlined, SafetyOutlined, SaveOutlined, ScanOutlined } from "@ant-design/icons";
 import type { ReactNode } from "react";
 
 import {
@@ -16,6 +16,7 @@ import {
   SMALL_TEXT_FONT_SIZE,
 } from "@/constants/ui";
 import type { IGenerateResult } from "@/typings/generate";
+import type { TGeneratedDetectTarget } from "@/typings/detect";
 
 const { Paragraph } = Typography;
 
@@ -31,6 +32,7 @@ export interface IMediaResultCardProps {
   videoTitle?: string;
   videoSrc?: string | null;
   className?: string;
+  onSendToDetect?: (target: TGeneratedDetectTarget) => void;
   onDownload: () => void;
   onSave: () => void;
   onReset: () => void;
@@ -48,11 +50,13 @@ export const MediaResultCard = ({
   videoTitle,
   videoSrc,
   className,
+  onSendToDetect,
   onDownload,
   onSave,
   onReset,
 }: IMediaResultCardProps) => {
   const currentVideoSrc = videoSrc || result?.videoUrl || "";
+  const hasResultMedia = Boolean(result?.imageUrl || result?.videoUrl);
 
   return (
     <Card title={title} bordered={false} className={className}>
@@ -86,7 +90,23 @@ export const MediaResultCard = ({
             </div>
           </div>
           <Space className="media-result-actions" style={{ marginTop: DEFAULT_SPACE_SIZE, width: FULL_WIDTH }} direction="vertical">
-            <Button type="primary" block icon={<DownloadOutlined />} onClick={onDownload}>
+            {onSendToDetect && (
+              <Dropdown
+                trigger={["click"]}
+                menu={{
+                  items: [
+                    { key: "fake", label: "送到 AI 生成检测", icon: <ScanOutlined /> },
+                    { key: "unsafe", label: "送到敏感内容检测", icon: <SafetyOutlined /> },
+                  ],
+                  onClick: ({ key }) => onSendToDetect(key as TGeneratedDetectTarget),
+                }}
+              >
+                <Button type="primary" block icon={<ScanOutlined />} disabled={!hasResultMedia}>
+                  一键送到检测模块
+                </Button>
+              </Dropdown>
+            )}
+            <Button block icon={<DownloadOutlined />} onClick={onDownload}>
               下载到本地
             </Button>
             <Button block icon={<SaveOutlined />} onClick={onSave}>

@@ -32,7 +32,9 @@ import {
   generateSeedEdit,
 } from "@/services/generate";
 import { saveGeneratedContent } from "@/services/content";
+import { sendGeneratedResultToDetect } from "@/utils/detectTransfer";
 import type { IDeepfakeFormValues, IGenerateResult, TDeepfakeFunction } from "@/typings/generate";
+import type { TGeneratedDetectTarget } from "@/typings/detect";
 import { downloadMedia, getBase64FromUploadFile, getUploadPreviewUrl } from "@/utils/media";
 
 const { Title, Paragraph } = Typography;
@@ -206,6 +208,22 @@ const DeepfakeGeneratePage = () => {
     }
   };
 
+  const handleSendToDetect = (target: TGeneratedDetectTarget) => {
+    const values = form.getFieldsValue();
+    const currentFunctionType = values.function || DEEPFAKE_DEFAULT_FUNCTION;
+    const sent = sendGeneratedResultToDetect({
+      navigate,
+      result,
+      mediaType: result?.videoUrl ? "video" : "image",
+      target,
+      title: `Deepfake ${DEEPFAKE_FUNCTION_LABELS[currentFunctionType]}`,
+    });
+
+    if (!sent) {
+      message.warning("暂无可送检的生成结果");
+    }
+  };
+
   return (
     <div className="page-transition deepfake-page">
       <div className="page-header">
@@ -245,6 +263,7 @@ const DeepfakeGeneratePage = () => {
             result={result}
             imageWidth={DEEPFAKE_RESULT_IMAGE_WIDTH}
             videoTitle="人脸动画结果"
+            onSendToDetect={handleSendToDetect}
             onDownload={handleDownload}
             onSave={handleSave}
             onReset={() => setResult(null)}

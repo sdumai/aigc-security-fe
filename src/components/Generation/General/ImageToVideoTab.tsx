@@ -70,12 +70,14 @@ import { MediaResultCard } from "@/components/Generation/common/MediaResultCard"
 import { ImageToVideoModelIntroCard } from "@/components/Generation/General/ImageToVideoModelIntroCard";
 import { generateImageToVideo } from "@/services/generate";
 import { saveGeneratedContent } from "@/services/content";
+import { sendGeneratedResultToDetect } from "@/utils/detectTransfer";
 import type {
   IImageToVideoFormValues,
   IVideoGenerateResult,
   TImageToVideoMode,
   TImageToVideoModel,
 } from "@/typings/generate";
+import type { TGeneratedDetectTarget } from "@/typings/detect";
 import {
   createUploadFile,
   downloadMedia,
@@ -321,6 +323,21 @@ export const ImageToVideoTab = () => {
       setTimeout(() => navigate(DATA_OUTPUT_ROUTE), SAVE_NAVIGATION_DELAY_MS);
     } catch (error) {
       console.error("Save error:", error);
+    }
+  };
+
+  const handleSendToDetect = (target: TGeneratedDetectTarget) => {
+    const values = form.getFieldsValue();
+    const sent = sendGeneratedResultToDetect({
+      navigate,
+      result,
+      mediaType: "video",
+      target,
+      title: values.prompt,
+    });
+
+    if (!sent) {
+      message.warning("暂无可送检的生成视频");
     }
   };
 
@@ -588,6 +605,7 @@ export const ImageToVideoTab = () => {
             loadingText="正在生成视频，请稍候..."
             emptyText="图生视频结果将显示在这里"
             result={result}
+            onSendToDetect={handleSendToDetect}
             onDownload={handleDownload}
             onSave={handleSave}
             onReset={() => setResult(null)}

@@ -35,7 +35,9 @@ import { MediaResultCard } from "@/components/Generation/common/MediaResultCard"
 import { ImageModelIntroCard } from "@/components/Generation/General/ImageModelIntroCard";
 import { generateTextToImage } from "@/services/generate";
 import { saveGeneratedContent } from "@/services/content";
+import { sendGeneratedResultToDetect } from "@/utils/detectTransfer";
 import type { IImageGenerateResult, ITextToImageFormValues } from "@/typings/generate";
+import type { TGeneratedDetectTarget } from "@/typings/detect";
 import { downloadMedia } from "@/utils/media";
 
 const { Paragraph } = Typography;
@@ -129,6 +131,21 @@ export const TextToImageTab = () => {
       setTimeout(() => navigate(DATA_OUTPUT_ROUTE), SAVE_NAVIGATION_DELAY_MS);
     } catch (error) {
       console.error("Save error:", error);
+    }
+  };
+
+  const handleSendToDetect = (target: TGeneratedDetectTarget) => {
+    const values = form.getFieldsValue();
+    const sent = sendGeneratedResultToDetect({
+      navigate,
+      result,
+      mediaType: "image",
+      target,
+      title: values.prompt,
+    });
+
+    if (!sent) {
+      message.warning("暂无可送检的生成图片");
     }
   };
 
@@ -252,6 +269,7 @@ export const TextToImageTab = () => {
           emptyText="图像将在生成后显示在这里"
           result={result}
           imageAlt="生成的图像"
+          onSendToDetect={handleSendToDetect}
           onDownload={handleDownload}
           onSave={handleSave}
           onReset={() => setResult(null)}
