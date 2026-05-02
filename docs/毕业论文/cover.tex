@@ -1,31 +1,52 @@
-\begin{titlepage}
-  \thispagestyle{empty}
+\begin{figure}[t]
   \centering
+  \includegraphics[width=0.8\linewidth]{pic/cover.jpg}
+\end{figure}
 
-  \includegraphics[width=0.68\textwidth]{logo.png}\par
+\begin{center}
+  \fontsize{66pt}{0}
+  \heiti
+  \punctstyle{banjiao}
+  \scalebox{0.68}[1.0]{毕\qquad 业\qquad 论\qquad 文\qquad （设\qquad 计）}
+\end{center}
 
-  \vspace{0.8cm}
-  {\songti\zihao{2}山东大学本科毕业论文（设计）\par}
+\begin{center}
+  \heiti\zihao{-2}\bfseries
+  \begin{tabularx}{0.96\textwidth}{@{}l>{\raggedright\arraybackslash}X@{}}
+    论文（设计）题目： & \thesisTitleCn
+  \end{tabularx}
+\end{center}
 
-  \vspace{0.8cm}
-  {\songti\zihao{2}\bfseries 面向AI生成内容的安全性研究与工具开发\par}
+\vspace{\fill}
 
-  \vspace{8.6cm}
-  {\songti\zihao{4}
-  姓名：麦世徐\par}
+\begin{table}[h]
+  \renewcommand\arraystretch{2}
+  \centering
+  \songti
+  \zihao{4}
+  \begin{tabularx}{20em}{l>{\centering\arraybackslash}X}
+    \textbf{\kaishu 姓\qquad 名} & \thesisStudentName \\
+    \cline{2-2}
+    \textbf{\kaishu 学\qquad 号} & \thesisStudentId \\
+    \cline{2-2}
+    \textbf{\kaishu 学\qquad 院} & \thesisCollege \\
+    \cline{2-2}
+    \textbf{\kaishu 年\qquad 级} & \thesisGrade \\
+    \cline{2-2}
+    \textbf{\kaishu 专\qquad 业} & \thesisMajor \\
+    \cline{2-2}
+    \textbf{\kaishu 指导教师} & \thesisSupervisor \\
+    \cline{2-2}
+  \end{tabularx}
+\end{table}
 
-  \vspace{0.2cm}
-  {\songti\zihao{4}
-  学号：202200460157\par}
+\vspace{\fill}
 
-  \vspace{0.2cm}
-  {\songti\zihao{4}
-  专业：网络空间安全\par}
-
-  \vspace{0.2cm}
-  {\songti\zihao{4}
-  指导教师：郭山清\par}
-
-  \vfill
-  {\kaishu\zihao{4}\today\par}
-\end{titlepage}
+\begin{table}[h]
+  \renewcommand\arraystretch{2}
+  \kaishu
+  \centering
+  \begin{tabular}{clclcl}
+    \thesisDateYear & 年 & \thesisDateMonth & 月 & \thesisDateDay & 日 \\
+  \end{tabular}
+\end{table}

@@ -1,21 +1,58 @@
-\documentclass[12pt,a4paper,oneside,fontset=fandol]{ctexrep}
+\documentclass[12pt,a4paper,zihao=-4,AutoFakeBold,AutoFakeSlant,fontset=fandol]{ctexart}
 
-\usepackage{geometry}
-\geometry{left=3cm,right=2.5cm,top=2.8cm,bottom=2.8cm}
-
+\usepackage{iftex}
+\usepackage{amsmath,amssymb,mathtools}
+\usepackage{graphicx,float}
+\usepackage{booktabs}
+\usepackage{caption}
+\usepackage{geometry,fancyhdr}
+\usepackage{appendix}
+\usepackage{tocloft}
+\usepackage{gbt7714}
+\usepackage[hidelinks]{hyperref}
 \usepackage{fontspec}
-\setmainfont{Times New Roman}
-
-\usepackage{graphicx}
-\usepackage{array}
-\newcolumntype{C}[1]{>{\centering\arraybackslash}m{#1}}
-\newcolumntype{L}[1]{>{\raggedright\arraybackslash}m{#1}}
-\usepackage{float}
+\usepackage{setspace}
+\usepackage{array,tabularx}
+\usepackage{xcolor}
+\usepackage{chngcntr}
+\usepackage{listings}
+\usepackage{xparse}
 \usepackage[section]{placeins}
 \usepackage{tikz}
 \usetikzlibrary{arrows.meta,positioning,shapes.geometric,fit,calc,backgrounds}
-\usepackage{setspace}
-\onehalfspacing
+\citestyle{numbers}
+
+\newif\ifuseminted
+\usemintedfalse
+\ifuseminted
+  \usepackage{minted}
+\fi
+
+\input{metadata}
+
+\ifPDFTeX
+  \PackageError{SDUThesis}{This template requires XeLaTeX or LuaLaTeX}{
+    Please compile with xelatex main.tex or lualatex main.tex,\MessageBreak
+    not latex/pdflatex.
+  }
+\fi
+
+\geometry{left=3cm,right=3cm,top=2.5cm,bottom=2.5cm}
+\IfFontExistsTF{Times New Roman}{
+  \setmainfont{Times New Roman}
+  \newfontfamily\thesiswesternfont{Times New Roman}
+}{
+  \setmainfont{TeX Gyre Termes}
+  \newfontfamily\thesiswesternfont{TeX Gyre Termes}
+}
+\setstretch{1.5}
+\setlength{\parindent}{2em}
+\setlength{\parskip}{0pt}
+\setcounter{secnumdepth}{3}
+\setcounter{tocdepth}{2}
+
+\newcolumntype{C}[1]{>{\centering\arraybackslash}m{#1}}
+\newcolumntype{L}[1]{>{\raggedright\arraybackslash}m{#1}}
 
 \newcommand{\screenshotplaceholder}[2][0.92\textwidth]{%
   \fbox{%
@@ -27,47 +64,189 @@
   }%
 }
 
-\usepackage{hyperref}
-\hypersetup{
-  colorlinks=true,
-  linkcolor=black,
-  citecolor=black,
-  urlcolor=blue
+\fancypagestyle{plain}{
+  \fancyhf{}
+  \fancyfoot[C]{\thesiswesternfont\zihao{-5}\thepage}
+  \renewcommand{\headrulewidth}{0pt}
+  \renewcommand{\footrulewidth}{0pt}
+}
+\fancypagestyle{body}{
+  \fancyhf{}
+  \fancyhead[C]{\songti\zihao{-5}山东大学本科毕业论文（设计）}
+  \fancyfoot[C]{\thesiswesternfont\zihao{-5}\thepage}
+  \renewcommand{\headrulewidth}{0.4pt}
+  \renewcommand{\footrulewidth}{0pt}
 }
 
-\title{面向AIGC安全的多模态内容检测与分析平台设计与实现}
-\author{麦世徐}
-\date{\today}
+\ctexset{
+  section={
+    format=\heiti\zihao{3}\bfseries,
+    beforeskip=0.8\baselineskip,
+    afterskip=0.5\baselineskip,
+  },
+  subsection={
+    format=\heiti\zihao{4}\bfseries,
+    beforeskip=0.5\baselineskip,
+    afterskip=0.5\baselineskip,
+  },
+  subsubsection={
+    format=\heiti\zihao{-4}\bfseries,
+    beforeskip=0.5\baselineskip,
+    afterskip=0.5\baselineskip,
+  },
+  autoindent=true,
+}
+
+\makeatletter
+\let\thesis@template@section\section
+\let\thesis@template@subsection\subsection
+\let\thesis@template@subsubsection\subsubsection
+\NewDocumentCommand{\chapter}{s m}{%
+  \IfBooleanTF{#1}{%
+    \phantomsection
+    \begin{center}
+      {\heiti\zihao{-2}\bfseries #2}
+    \end{center}
+    \vspace{1.5\baselineskip}
+  }{%
+    \thesis@template@section{#2}%
+  }%
+}
+\RenewDocumentCommand{\section}{s m}{%
+  \IfBooleanTF{#1}{\thesis@template@subsection*{#2}}{\thesis@template@subsection{#2}}%
+}
+\RenewDocumentCommand{\subsection}{s m}{%
+  \IfBooleanTF{#1}{\thesis@template@subsubsection*{#2}}{\thesis@template@subsubsection{#2}}%
+}
+\@ifundefined{l@chapter}{%
+  \newcommand*\l@chapter{\@dottedtocline{1}{0em}{2.3em}}%
+}{}
+\makeatother
+
+\renewcommand{\contentsname}{目\qquad 录}
+\renewcommand{\cfttoctitlefont}{\hfill\heiti\zihao{-2}\bfseries}
+\renewcommand{\cftaftertoctitle}{\hfill}
+\renewcommand{\cftsecfont}{\songti\zihao{-4}}
+\renewcommand{\cftsubsecfont}{\songti\zihao{-4}}
+\renewcommand{\cftsecpagefont}{\songti\zihao{-4}}
+\renewcommand{\cftsubsecpagefont}{\songti\zihao{-4}}
+\setlength{\cftbeforesecskip}{0pt}
+\setlength{\cftbeforesubsecskip}{0pt}
+
+\counterwithin{figure}{section}
+\counterwithin{table}{section}
+\counterwithin{equation}{section}
+\renewcommand{\thefigure}{\thesection.\arabic{figure}}
+\renewcommand{\thetable}{\thesection-\arabic{table}}
+\renewcommand{\theequation}{\thesection-\arabic{equation}}
+\renewcommand{\figurename}{图}
+\renewcommand{\tablename}{表}
+\DeclareCaptionLabelFormat{sdufigurelabel}{图#2}
+\DeclareCaptionLabelFormat{sdutablelabel}{表#2}
+\DeclareCaptionFont{sdufigure}{\zihao{5}\songti\bfseries}
+\DeclareCaptionFont{sdutable}{\zihao{5}\songti}
+\captionsetup{
+  labelsep=space,
+  justification=centering,
+  singlelinecheck=false,
+}
+\captionsetup[figure]{position=bottom,font=sdufigure,labelformat=sdufigurelabel}
+\captionsetup[table]{position=top,font=sdutable,labelformat=sdutablelabel}
+
+\bibliographystyle{gbt7714-numerical}
+\makeatletter
+\renewenvironment{thebibliography}[1]
+  {\begin{center}
+     {\heiti\zihao{-2}\bfseries 参考文献}
+   \end{center}%
+   \vspace{0.5\baselineskip}%
+   \list{\@biblabel{\@arabic\c@enumiv}}%
+        {\settowidth\labelwidth{\@biblabel{#1}}%
+         \leftmargin\labelwidth
+         \advance\leftmargin\labelsep
+         \@openbib@code
+         \usecounter{enumiv}%
+         \let\p@enumiv\@empty
+         \renewcommand\theenumiv{\@arabic\c@enumiv}%
+         \itemsep 0pt
+         \parsep 0pt}%
+   \songti\zihao{5}\setstretch{1}%
+   \sloppy
+   \clubpenalty4000
+   \@clubpenalty \clubpenalty
+   \widowpenalty4000%
+   \sfcode`\.\@m}
+  {\def\@noitemerr
+    {\@latex@warning{Empty `thebibliography' environment}}%
+   \endlist}
+\makeatother
+
+\lstdefinestyle{thesiscode}{
+  basicstyle=\ttfamily\zihao{5},
+  keywordstyle=\color{blue!60!black},
+  commentstyle=\color{green!40!black},
+  stringstyle=\color{red!60!black},
+  numbers=left,
+  numberstyle=\rmfamily\zihao{5}\color{black!55},
+  frame=single,
+  framerule=0.4pt,
+  rulecolor=\color{black!30},
+  breaklines=true,
+  columns=fullflexible,
+  keepspaces=true,
+  showstringspaces=false,
+  tabsize=2,
+  xleftmargin=2em,
+  xrightmargin=1em,
+}
+\lstset{style=thesiscode}
+
+\title{\thesisTitleCn}
+\author{\thesisStudentName}
+\date{\thesisDateYear 年 \thesisDateMonth 月 \thesisDateDay 日}
 
 \begin{document}
 
+\pagestyle{empty}
 \input{cover}
 \clearpage
 
 % \input{score-sheet}
 % \clearpage
 
-\pagenumbering{gobble}
 \input{abstract-zh}
 \clearpage
 \input{abstract-en}
-\clearpage
 
-\pagenumbering{Roman}
-\tableofcontents
 \clearpage
-
-\pagenumbering{arabic}
 \setcounter{page}{1}
+\pagenumbering{Roman}
+\pagestyle{plain}
+\tableofcontents
+
+\clearpage
+\setcounter{page}{1}
+\pagenumbering{arabic}
+\pagestyle{body}
+\songti\zihao{-4}
 
 \input{chapter1}
+\clearpage
 \input{chapter2}
+\clearpage
 \input{chapter3}
+\clearpage
 \input{chapter4}
+\clearpage
 \input{chapter5}
+\clearpage
 \input{chapter6}
+
+\clearpage
 \input{references}
+\clearpage
 \input{acknowledgements}
+\clearpage
 \input{appendix}
 
 \end{document}
