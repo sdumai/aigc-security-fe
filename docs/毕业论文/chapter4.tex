@@ -146,18 +146,17 @@ Deepfake生成页主要覆盖人脸替换、人脸动画和属性编辑三类任
 \caption{安全审核结果风险映射}
 \label{tab:risk-mapping}
 \renewcommand{\arraystretch}{1.35}
-\begin{tabular}{|C{2.2cm}|C{3.0cm}|L{8.5cm}|}
-\hline
+\zihao{5}\songti
+\begin{tabular}{C{2.2cm}C{3.0cm}L{8.5cm}}
+\toprule
 \textbf{接口建议} &
 \textbf{平台风险等级} &
-\multicolumn{1}{C{8.5cm}|}{\textbf{页面展示与处理含义}} \\
-\hline
+\multicolumn{1}{C{8.5cm}}{\textbf{页面展示与处理含义}} \\
+\midrule
 \texttt{pass} & 低风险 & 未发现明显违规内容，页面展示为可通过状态，仍保留模型说明用于回溯。 \\
-\hline
 \texttt{review} & 中风险 & 存在不确定或边界风险，页面提示建议人工复审，并展示风险标签和原因。 \\
-\hline
 \texttt{block} & 高风险 & 存在较明确违规或危险信号，页面展示为高风险并建议阻断或重点核查。 \\
-\hline
+\bottomrule
 \end{tabular}
 \end{table}
 
@@ -180,29 +179,23 @@ Deepfake生成页主要覆盖人脸替换、人脸动画和属性编辑三类任
 \centering
 \caption{内容管理模块主要接口}
 \label{tab:content-api-list}
-\small
 \setlength{\tabcolsep}{3.5pt}
 \renewcommand{\arraystretch}{1.35}
-\begin{tabular}{|C{2.5cm}|L{4.8cm}|L{6.1cm}|}
-\hline
+\zihao{5}\songti
+\begin{tabular}{C{2.5cm}L{4.8cm}L{6.1cm}}
+\toprule
 \textbf{接口} &
-\multicolumn{1}{C{4.8cm}|}{\textbf{路径}} &
-\multicolumn{1}{C{6.1cm}|}{\textbf{功能说明}} \\
-\hline
+\multicolumn{1}{C{4.8cm}}{\textbf{路径}} &
+\multicolumn{1}{C{6.1cm}}{\textbf{功能说明}} \\
+\midrule
 保存样本 & \texttt{POST /api/data/save} & 保存生成图片或视频，写入媒体地址、来源模块、模型、提示词和检测状态。 \\
-\hline
 样本列表 & \texttt{GET /api/data/outputs} & 按时间倒序返回生成样本库，用于内容管理页展示和统计。 \\
-\hline
 样本详情 & \texttt{GET /api/data/outputs/:id} & 根据样本编号读取单个样本，用于详情回看和后续扩展。 \\
-\hline
 删除样本 & \texttt{DELETE /api/data/outputs/:id} & 从样本库移除样本；若已有关联检测记录，则保留记录中的来源快照。 \\
-\hline
 保存检测记录 & \texttt{POST /api/data/detections} & 保存检测结论、分数、标签、模型和原始结果，并更新关联样本检测状态。 \\
-\hline
 检测记录列表 & \texttt{GET /api/data/detections} & 返回全量检测历史，用于检测记录页展示和风险统计。 \\
-\hline
 样本检测历史 & \begin{tabular}[c]{@{}l@{}}\texttt{GET /api/data/outputs/}\\\texttt{:id/detections}\end{tabular} & 返回某个生成样本的关联检测记录，支持从样本详情查看历史。 \\
-\hline
+\bottomrule
 \end{tabular}
 \end{table}
 
@@ -251,24 +244,20 @@ Deepfake生成页主要覆盖人脸替换、人脸动画和属性编辑三类任
 \caption{前端页面模块与职责}
 \label{tab:frontend-pages}
 \renewcommand{\arraystretch}{1.35}
-\begin{tabular}{|C{2.9cm}|L{4.3cm}|L{6.8cm}|}
-\hline
+\zihao{5}\songti
+\begin{tabular}{C{2.9cm}L{4.3cm}L{6.8cm}}
+\toprule
 \textbf{页面模块} &
-\multicolumn{1}{C{4.3cm}|}{\textbf{主要输入}} &
-\multicolumn{1}{C{6.8cm}|}{\textbf{核心职责}} \\
-\hline
+\multicolumn{1}{C{4.3cm}}{\textbf{主要输入}} &
+\multicolumn{1}{C{6.8cm}}{\textbf{核心职责}} \\
+\midrule
 首页与导航页 & 无或少量演示入口 & 展示平台功能分区，引导用户进入生成、检测和内容管理流程。 \\
-\hline
 Deepfake生成页 & 源人脸、目标图像、驱动描述或编辑指令 & 支持人脸替换、人脸动画和属性编辑等典型深度伪造生成任务，并将结果保存或送检。 \\
-\hline
 通用生成页 & 文本提示词、参考图像和生成参数 & 支持文生图、文生视频、图生视频以及本地生成服务调用，提供生成结果入库与一键送检入口。 \\
-\hline
 虚假检测页 & 图像/视频文件或URL & 提供本地模型与外部接口两类真假检测入口，并展示置信度和原因说明。 \\
-\hline
 不安全检测页 & 图像/视频文件或URL & 对内容进行安全审核，输出风险等级、风险标签和处置建议。 \\
-\hline
 内容管理页 & 生成样本和检测记录 & 管理生成样本、检测历史、关联状态、下载、删除和再次送检。 \\
-\hline
+\bottomrule
 \end{tabular}
 \end{table}
 

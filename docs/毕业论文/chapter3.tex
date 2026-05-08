@@ -219,19 +219,18 @@
 \centering
 \caption{内容管理核心对象设计}
 \label{tab:content-management-objects}
-\small
 \setlength{\tabcolsep}{4pt}
 \renewcommand{\arraystretch}{1.35}
-\begin{tabular}{|C{2.5cm}|L{5.2cm}|L{6.2cm}|}
-\hline
+\zihao{5}\songti
+\begin{tabular}{C{2.5cm}L{5.2cm}L{6.2cm}}
+\toprule
 \textbf{对象类型} &
-\multicolumn{1}{C{5.2cm}|}{\textbf{关键字段}} &
-\multicolumn{1}{C{6.2cm}|}{\textbf{追踪意义}} \\
-\hline
+\multicolumn{1}{C{5.2cm}}{\textbf{关键字段}} &
+\multicolumn{1}{C{6.2cm}}{\textbf{追踪意义}} \\
+\midrule
 生成样本 & 样本编号、媒体类型、标题、来源模块、生成模型、提示词、媒体地址、存储类型、检测状态、最近检测结果 & 保存平台生成的图像或视频，使其可以被再次预览、下载、送检和复核。 \\
-\hline
 检测记录 & 记录编号、关联样本编号、检测类型、媒体类型、结论、置信度或风险分数、检测模型、标签、原始结果、创建时间 & 保存每次检测或审核结论，使实验结果能够跨页面保留，并支持从记录反查样本来源。 \\
-\hline
+\bottomrule
 \end{tabular}
 \end{table}
 
@@ -258,24 +257,20 @@
 \caption{检测结果统一字段设计}
 \label{tab:unified-result-schema}
 \renewcommand{\arraystretch}{1.35}
-\begin{tabular}{|C{2.0cm}|C{4.1cm}|L{8.0cm}|}
-\hline
+\zihao{5}\songti
+\begin{tabular}{C{2.0cm}C{4.1cm}L{8.0cm}}
+\toprule
 \textbf{字段类别} &
 \textbf{代表字段} &
-\multicolumn{1}{C{8.0cm}|}{\textbf{设计说明}} \\
-\hline
+\multicolumn{1}{C{8.0cm}}{\textbf{设计说明}} \\
+\midrule
 任务标识 & taskType、mediaType & 标记任务属于虚假检测或安全审核，以及输入媒介为图像或视频。 \\
-\hline
 判定结论 & isFake、safe、suggestion & 虚假检测关注是否为AI生成或伪造；安全审核关注是否安全以及通过、复审、阻断等建议。 \\
-\hline
 可信程度 & confidence、riskScore & 将模型分数或审核建议映射为0到1的置信度或0到100的风险分值，便于统一可视化。 \\
-\hline
 风险解释 & labels、reason、artifacts & 保存风险标签、模型说明和可疑痕迹描述，提升检测结果的可解释性。 \\
-\hline
 展示信息 & previewUrl、model、details & 记录预览资源、能力来源和任务细节，支持页面展示与实验回溯。 \\
-\hline
 追踪信息 & sampleId、sourceModule、createdAt & 关联生成样本、来源模块和检测时间，使检测记录能够回溯到具体生成任务。 \\
-\hline
+\bottomrule
 \end{tabular}
 \end{table}
 

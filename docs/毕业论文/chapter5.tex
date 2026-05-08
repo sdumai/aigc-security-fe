@@ -52,16 +52,15 @@ F1 = \frac{2 \times Precision \times Recall}{Precision + Recall}
 \centering
 \caption{当前阶段图像真假检测样本构成}
 \renewcommand{\arraystretch}{1.35}
-\begin{tabular}{|C{5.0cm}|C{5.0cm}|C{2.4cm}|}
-\hline
+\zihao{5}\songti
+\begin{tabular}{C{5.0cm}C{5.0cm}C{2.4cm}}
+\toprule
 \textbf{样本来源} & \textbf{类别} & \textbf{数量} \\
-\hline
+\midrule
 ProGAN测试集 & 真实图像 & 200 \\
-\hline
 ProGAN测试集 & 伪造图像 & 200 \\
-\hline
 平台样例与生成结果 & 开放场景补充样本 & 若干 \\
-\hline
+\bottomrule
 \end{tabular}
 \end{table}
 
@@ -83,15 +82,15 @@ ProGAN测试集 & 伪造图像 & 200 \\
 \centering
 \caption{UniversalFakeDetect在ProGAN mini子集上的链路回归结果}
 \label{tab:ufd-progan-mini-result}
-\small
 \setlength{\tabcolsep}{2.5pt}
 \renewcommand{\arraystretch}{1.35}
-\begin{tabular}{|C{2.5cm}|C{1.4cm}|C{1.4cm}|C{2.25cm}|C{2.25cm}|C{2.25cm}|C{1.4cm}|}
-\hline
+\zihao{5}\songti
+\begin{tabular}{C{2.5cm}C{1.4cm}C{1.4cm}C{2.25cm}C{2.25cm}C{2.25cm}C{1.4cm}}
+\toprule
 \textbf{评测集} & \textbf{真实样本} & \textbf{伪造样本} & \textbf{真实类准确率} & \textbf{伪造类准确率} & \textbf{总体准确率} & \textbf{AP} \\
-\hline
+\midrule
 \texttt{progan\_mini} & 100 & 100 & 96.00\% & 93.00\% & 94.5.00\% & 92.66\% \\
-\hline
+\bottomrule
 \end{tabular}
 \end{table}
 
@@ -105,22 +104,20 @@ ProGAN测试集 & 伪造图像 & 200 \\
 \centering
 \caption{图像安全审核功能验证内容}
 \label{tab:image-safety-validation}
-\small
 \setlength{\tabcolsep}{4pt}
 \renewcommand{\arraystretch}{1.35}
-\begin{tabular}{|C{2.2cm}|L{3.1cm}|L{3.7cm}|L{3.6cm}|}
-\hline
+\zihao{5}\songti
+\begin{tabular}{C{2.2cm}L{3.1cm}L{3.7cm}L{3.6cm}}
+\toprule
 \textbf{验证对象} &
-\multicolumn{1}{C{3.1cm}|}{\textbf{输入样本}} &
-\multicolumn{1}{C{3.7cm}|}{\textbf{返回字段}} &
-\multicolumn{1}{C{3.6cm}|}{\textbf{验证重点}} \\
-\hline
+\multicolumn{1}{C{3.1cm}}{\textbf{输入样本}} &
+\multicolumn{1}{C{3.7cm}}{\textbf{返回字段}} &
+\multicolumn{1}{C{3.6cm}}{\textbf{验证重点}} \\
+\midrule
 安全图像 & 自然场景或普通人物图像 & 安全状态、建议通过、空风险标签或低风险说明 & 验证正常内容不会被误展示为高风险。 \\
-\hline
 风险图像 & 暴力、色情或敏感场景样例 & 风险标签、复审或阻断建议、原因说明 & 验证审核接口能输出可解释风险结果。 \\
-\hline
 生成图像 & 文生图或属性编辑结果 & 安全状态、风险标签、处置建议 & 验证平台生成内容可以回流到审核链路。 \\
-\hline
+\bottomrule
 \end{tabular}
 \end{table}
 
@@ -130,24 +127,22 @@ ProGAN测试集 & 伪造图像 & 200 \\
 \centering
 \caption{图像安全审核小规模验证结果}
 \label{tab:image-safety-quant-result}
-\small
 \setlength{\tabcolsep}{4pt}
 \renewcommand{\arraystretch}{1.35}
-\begin{tabular}{|C{2.4cm}|C{1.7cm}|C{2.2cm}|C{2.2cm}|C{2.0cm}|C{2.0cm}|}
-\hline
+\zihao{5}\songti
+\begin{tabular}{C{2.4cm}C{1.7cm}C{2.2cm}C{2.2cm}C{2.0cm}C{2.0cm}}
+\toprule
 \textbf{样本类别} &
 \textbf{输入数量} &
 \textbf{判断为正常} &
 \textbf{判断为风险} &
 \textbf{正确数量} &
 \textbf{类别准确率} \\
-\hline
+\midrule
 正常图像 & 50 & 49 & 1 & 49 & 98.00\% \\
-\hline
 风险图像 & 10 & 0 & 10 & 10 & 100.00\% \\
-\hline
 合计 & 60 & 49 & 11 & 59 & 98.33\% \\
-\hline
+\bottomrule
 \end{tabular}
 \end{table}
 
@@ -171,22 +166,20 @@ ProGAN测试集 & 伪造图像 & 200 \\
 \centering
 \caption{视频检测与安全审核功能验证内容}
 \label{tab:video-safety-validation}
-\small
 \setlength{\tabcolsep}{4pt}
 \renewcommand{\arraystretch}{1.35}
-\begin{tabular}{|C{2.5cm}|L{3.0cm}|L{4.3cm}|L{4.2cm}|}
-\hline
+\zihao{5}\songti
+\begin{tabular}{C{2.5cm}L{3.0cm}L{4.3cm}L{4.2cm}}
+\toprule
 \textbf{验证任务} &
-\multicolumn{1}{C{3.0cm}|}{\textbf{输入形式}} &
-\multicolumn{1}{C{4.3cm}|}{\textbf{返回字段}} &
-\multicolumn{1}{C{4.2cm}|}{\textbf{验证重点}} \\
-\hline
+\multicolumn{1}{C{3.0cm}}{\textbf{输入形式}} &
+\multicolumn{1}{C{4.3cm}}{\textbf{返回字段}} &
+\multicolumn{1}{C{4.2cm}}{\textbf{验证重点}} \\
+\midrule
 视频AI生成检测 & 视频URL或本地短视频Base64 & 真假结论、置信度、模型名称、原因说明 & 验证视频输入能否通过后端统一转发并映射为虚假检测结果。 \\
-\hline
 视频安全审核 & 视频URL或本地短视频Base64 & 安全状态、风险标签、处置建议、原因说明 & 验证视频审核链路能否与图像审核共享展示逻辑。 \\
-\hline
 生成结果回检 & 平台生成图片或视频 & 真假检测结果或安全审核结果 & 验证“生成—检测—展示”闭环是否可运行。 \\
-\hline
+\bottomrule
 \end{tabular}
 \end{table}
 
@@ -200,24 +193,21 @@ ProGAN测试集 & 伪造图像 & 200 \\
 \centering
 \caption{生成样本回检与内容管理验证内容}
 \label{tab:content-loop-validation}
-\small
 \setlength{\tabcolsep}{3.5pt}
 \renewcommand{\arraystretch}{1.35}
-\begin{tabular}{|C{2.4cm}|L{3.5cm}|L{4.0cm}|L{4.0cm}|}
-\hline
+\zihao{5}\songti
+\begin{tabular}{C{2.4cm}L{3.5cm}L{4.0cm}L{4.0cm}}
+\toprule
 \textbf{验证环节} &
-\multicolumn{1}{C{3.5cm}|}{\textbf{输入或操作}} &
-\multicolumn{1}{C{4.0cm}|}{\textbf{期望结果}} &
-\multicolumn{1}{C{4.0cm}|}{\textbf{验证意义}} \\
-\hline
+\multicolumn{1}{C{3.5cm}}{\textbf{输入或操作}} &
+\multicolumn{1}{C{4.0cm}}{\textbf{期望结果}} &
+\multicolumn{1}{C{4.0cm}}{\textbf{验证意义}} \\
+\midrule
 样本入库 & 生成图片或视频后点击保存 & 内容管理页出现样本缩略图、来源、模型、提示词和创建时间 & 验证生成结果能够从页面状态转化为持久样本。 \\
-\hline
 一键送检 & 从生成结果或样本详情选择检测目标 & 检测页自动加载媒体，保留样本编号和来源信息 & 验证跨页面数据传递和媒体输入复用能力。 \\
-\hline
 记录保存 & 完成AI生成检测或敏感检测 & 检测记录页出现结论、分数、标签、模型和时间 & 验证检测结果能够沉淀为可回看的历史记录。 \\
-\hline
 状态回写 & 关联样本完成一次或多次检测 & 样本列表更新AI生成检测/敏感检测状态和最近结论 & 验证样本库与检测记录库之间的关联关系。 \\
-\hline
+\bottomrule
 \end{tabular}
 \end{table}
 
@@ -231,24 +221,21 @@ ProGAN测试集 & 伪造图像 & 200 \\
 \centering
 \caption{不同任务的响应组织方式}
 \label{tab:response-mode}
-\small
 \setlength{\tabcolsep}{4pt}
 \renewcommand{\arraystretch}{1.35}
-\begin{tabular}{|C{2.5cm}|C{2.0cm}|L{4.5cm}|L{4.4cm}|}
-\hline
+\zihao{5}\songti
+\begin{tabular}{C{2.5cm}C{2.0cm}L{4.5cm}L{4.4cm}}
+\toprule
 \textbf{任务类型} &
 \textbf{响应模式} &
-\multicolumn{1}{C{4.5cm}|}{\textbf{后端处理重点}} &
-\multicolumn{1}{C{4.4cm}|}{\textbf{前端展示重点}} \\
-\hline
+\multicolumn{1}{C{4.5cm}}{\textbf{后端处理重点}} &
+\multicolumn{1}{C{4.4cm}}{\textbf{前端展示重点}} \\
+\midrule
 图像虚假检测 & 同步返回 & Base64或URL转发、分数与字段归一化 & 显示真假标签、置信度和模型说明。 \\
-\hline
 图像安全审核 & 同步返回 & 审核JSON提取、标签与建议映射 & 显示风险等级、风险标签和处理建议。 \\
-\hline
 视频检测与审核 & 同步或较长请求 & 视频URL/Base64封装、fps参数、结构化结果解析 & 显示视频预览、置信度和说明文本。 \\
-\hline
 文生视频/图生视频 & 异步轮询 & 任务提交、状态查询、超时控制和结果URL提取 & 显示加载状态、生成结果和失败提示。 \\
-\hline
+\bottomrule
 \end{tabular}
 \end{table}
 

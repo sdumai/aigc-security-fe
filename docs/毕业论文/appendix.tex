@@ -17,48 +17,32 @@
 \centering
 \caption{后端代理服务主要接口}
 \label{tab:appendix-api-list}
-\small
 \renewcommand{\arraystretch}{1.3}
-\begin{tabular}{|C{2.0cm}|L{5.7cm}|L{6.1cm}|}
-\hline
+\zihao{5}\songti
+\begin{tabular}{C{2.0cm}L{5.7cm}L{6.1cm}}
+\toprule
 \textbf{接口类型} &
-\multicolumn{1}{C{5.7cm}|}{\textbf{接口路径}} &
-\multicolumn{1}{C{6.1cm}|}{\textbf{主要功能}} \\
-\hline
+\multicolumn{1}{C{5.7cm}}{\textbf{接口路径}} &
+\multicolumn{1}{C{6.1cm}}{\textbf{主要功能}} \\
+\midrule
 检测类 & \path{/api/detect/universal-fake-detect} & 调用 UniversalFakeDetect 本地模型，对单张图像进行真实/伪造判别。 \\
-\hline
 检测类 & \path{/api/detect/volc-image-aigc} & 调用火山方舟视觉理解能力，对图像是否为 AI 生成内容进行判断。 \\
-\hline
 检测类 & \path{/api/detect/volc-video-aigc} & 调用火山方舟视频理解能力，对视频是否存在 AI 生成或深度伪造风险进行判断。 \\
-\hline
 检测类 & \path{/api/detect/volc-ims} & 调用图像内容安全审核能力，识别暴力、色情、敏感等不安全内容。 \\
-\hline
 检测类 & \path{/api/detect/volc-video-ims} & 调用视频内容安全审核能力，对视频片段进行不安全内容识别。 \\
-\hline
 生成类 & \path{/api/generate/faceswap} & 调用火山视觉智能人像融合接口，实现人脸替换生成。 \\
-\hline
 生成类 & \path{/api/generate/seededit} & 调用 SeedEdit 图像编辑能力，根据文本指令修改输入图像。 \\
-\hline
 生成类 & \path{/api/generate/fomm} & 调用图生视频能力，根据单张人脸图像和动作描述生成人脸动画。 \\
-\hline
 生成类 & \path{/api/generate/image} & 调用火山方舟文生图能力，根据提示词生成图像。 \\
-\hline
 生成类 & \path{/api/generate/image-stable-diffusion} & 转发至自托管 Stable Diffusion 服务，完成本地文生图生成。 \\
-\hline
 生成类 & \path{/api/generate/model-scope} & 转发至自托管 ModelScope 服务，完成本地文生视频生成。 \\
-\hline
 生成类 & \path{/api/generate/t2v} & 调用火山方舟文生视频能力，根据文本描述生成视频。 \\
-\hline
 生成类 & \path{/api/generate/i2v} & 调用火山方舟图生视频能力，根据参考图像和文本描述生成视频。 \\
-\hline
 数据类 & \path{/api/data/save} & 保存平台生成的图片或视频样本，记录来源模块、模型、提示词和媒体地址。 \\
-\hline
 数据类 & \path{/api/data/outputs} & 查询生成样本库，用于内容管理页展示样本列表与统计信息。 \\
-\hline
 数据类 & \path{/api/data/detections} & 保存或查询检测记录，沉淀AI生成检测与敏感内容检测结果。 \\
-\hline
 数据类 & \path{/api/data/outputs/:id/detections} & 查询某个生成样本的关联检测历史，用于样本详情回看。 \\
-\hline
+\bottomrule
 \end{tabular}
 \end{table}
 
