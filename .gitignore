@@ -32,3 +32,6 @@ server/uploads
 
 # 内容管理本地样本索引
 server/data
+
+# 本地隔离工作区
+.worktrees/
